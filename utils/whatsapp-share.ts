@@ -52,7 +52,12 @@ function formatInvoiceForWhatsApp(invoice: Transaction, pdfUrl?: string): string
 
   message += `\n*Summary:*\n`
   message += `Subtotal: ₹${invoice.subtotal.toFixed(2)}\n`
-  message += `GST (12%): ₹${invoice.tax.toFixed(2)}\n`
+
+  // Handle the new tax structure
+  invoice.taxes.forEach((tax) => {
+    message += `GST (${tax.rate}%): ₹${tax.amount.toFixed(2)}\n`
+  })
+
   message += `Discount: ₹${invoice.discount.toFixed(2)}\n`
   message += `*Total: ₹${invoice.total.toFixed(2)}*\n\n`
 
@@ -96,7 +101,7 @@ ${invoice.items.map((item) => `- ${item.name} (${item.batch}) x${item.quantity} 
 
 *Summary*
 Subtotal: ₹${invoice.subtotal.toFixed(2)}
-GST (12%): ₹${invoice.tax.toFixed(2)}
+${invoice.taxes.map((tax) => `GST (${tax.rate}%): ₹${tax.amount.toFixed(2)}`).join("\n")}
 Discount: ₹${invoice.discount.toFixed(2)}
 *Total: ₹${invoice.total.toFixed(2)}*
 

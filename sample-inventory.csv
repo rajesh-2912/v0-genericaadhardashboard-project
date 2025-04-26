@@ -1,0 +1,11 @@
+Name,Batch,Expiry,Quantity,PurchasePrice,Price,GstRate
+Paracetamol,PCM2023,2024-12-31,100,0.5,2,5
+Amoxicillin,AMX2023,2024-10-15,50,1.2,5,12
+Cetirizine,CTZ2023,2025-01-20,75,0.8,3,5
+Aspirin,ASP2023,2024-11-30,80,0.6,2.5,18
+Ibuprofen,IBU2023,2024-09-15,60,1.0,4,12
+Metformin,MET2023,2025-02-28,120,0.7,3.5,5
+Atorvastatin,ATV2023,2025-03-15,90,1.5,6,12
+Omeprazole,OMP2023,2024-08-20,70,0.9,4.5,18
+Losartan,LOS2023,2025-01-10,85,1.1,5.5,5
+Amlodipine,AML2023,2024-12-10,65,0.8,4,12

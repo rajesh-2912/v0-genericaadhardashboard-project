@@ -29,15 +29,10 @@ export default function SalesDashboard({ transactions }: SalesDashboardProps) {
   transactions.forEach((transaction) => {
     if (last7Days.includes(transaction.date)) {
       const currentTotal = dailySalesMap.get(transaction.date) || 0
+      // Ensure we're using the correct total from the transaction
       dailySalesMap.set(transaction.date, currentTotal + transaction.total)
     }
   })
-
-  // Convert to array for chart
-  const dailySalesData = Array.from(dailySalesMap.entries()).map(([date, total]) => ({
-    date: date,
-    sales: total,
-  }))
 
   // Process transactions to get category sales data
   const categorySalesMap = new Map<string, number>()
@@ -47,9 +42,16 @@ export default function SalesDashboard({ transactions }: SalesDashboardProps) {
       // Using first word of medicine name as a simple category
       const category = item.name.split(" ")[0]
       const currentTotal = categorySalesMap.get(category) || 0
+      // Use the item's total which includes quantity
       categorySalesMap.set(category, currentTotal + item.total)
     })
   })
+
+  // Convert to array for chart
+  const dailySalesData = Array.from(dailySalesMap.entries()).map(([date, total]) => ({
+    date: date,
+    sales: total,
+  }))
 
   // Convert to array and get top 5 categories
   const categorySalesData = Array.from(categorySalesMap.entries())
