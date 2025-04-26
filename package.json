@@ -63,7 +63,8 @@
     "peerjs": "latest",
     "nanoid": "latest",
     "papaparse": "latest",
-    "jspdf-autotable": "latest"
+    "jspdf-autotable": "latest",
+    "tesseract.js": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

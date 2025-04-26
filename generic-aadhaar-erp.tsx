@@ -3,11 +3,18 @@
 import type React from "react"
 import { useState, useEffect, useRef, useMemo } from "react"
 import { toast } from "@/components/ui/use-toast"
-import { useLocalStorage } from "./hooks/use-local-storage"
-import type { InwardEntry, SyncStatus } from "./types/erp-types"
+import type { InwardEntry } from "./types/erp-types"
 import { shareInvoiceViaWhatsApp } from "./utils/whatsapp-share"
 import { generateInvoicePDF } from "./utils/pdf-generator"
+// Update the imports at the top of the file
+import { useEnhancedSync } from "./hooks/use-enhanced-sync"
+import SyncStatusIndicator from "./components/sync-status-indicator"
+import { Button } from "@/components/ui/button"
 import Papa from "papaparse"
+import Tesseract from "tesseract.js"
+import { EnhancedSyncDialog } from "./components/enhanced-sync-dialog"
+// Add this import at the top of the file
+import FirebaseConfigDialog from "./components/firebase-config-dialog"
 
 export interface Tax {
   rate: number
@@ -71,10 +78,87 @@ export type Transaction = {
 export default function GenericAadhaarERP() {
   const date = new Date().toLocaleString()
 
+  // State for data persistence with enhanced sync
+  const [inventory, setInventory, inventorySyncStatus, inventorySyncInfo] = useEnhancedSync<InventoryItem[]>(
+    "inventory",
+    [],
+  )
+  const [transactions, setTransactions, transactionsSyncStatus, transactionsSyncInfo] = useEnhancedSync<Transaction[]>(
+    "transactions",
+    [],
+  )
+  const [inwardEntries, setInwardEntries, inwardEntriesSyncStatus, inwardEntriesSyncInfo] = useEnhancedSync<
+    InwardEntry[]
+  >("inward-entries", [])
+
+  // Derive overall sync status
+  const syncStatus = useMemo(() => {
+    if (
+      inventorySyncStatus === "syncing" ||
+      transactionsSyncStatus === "syncing" ||
+      inwardEntriesSyncStatus === "syncing"
+    ) {
+      return "syncing"
+    }
+    if (inventorySyncStatus === "error" || transactionsSyncStatus === "error" || inwardEntriesSyncStatus === "error") {
+      return "error"
+    }
+    if (
+      inventorySyncStatus === "offline" ||
+      transactionsSyncStatus === "offline" ||
+      inwardEntriesSyncStatus === "offline"
+    ) {
+      return "offline"
+    }
+    if (inventorySyncStatus === "local" || transactionsSyncStatus === "local" || inwardEntriesSyncStatus === "local") {
+      return "local"
+    }
+    return "synced"
+  }, [inventorySyncStatus, transactionsSyncStatus, inwardEntriesSyncStatus])
+
+  // Get last sync time
+  const lastSyncTime = useMemo(() => {
+    const times = [
+      inventorySyncInfo.lastSyncTime,
+      transactionsSyncInfo.lastSyncTime,
+      inwardEntriesSyncInfo.lastSyncTime,
+    ].filter(Boolean) as string[]
+
+    if (times.length === 0) return undefined
+
+    return times.sort().pop()
+  }, [inventorySyncInfo.lastSyncTime, transactionsSyncInfo.lastSyncTime, inwardEntriesSyncInfo.lastSyncTime])
+
+  // Get connected devices
+  const connectedDevices = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...inventorySyncInfo.connectedDevices,
+        ...transactionsSyncInfo.connectedDevices,
+        ...inwardEntriesSyncInfo.connectedDevices,
+      ]),
+    )
+  }, [
+    inventorySyncInfo.connectedDevices,
+    transactionsSyncInfo.connectedDevices,
+    inwardEntriesSyncInfo.connectedDevices,
+  ])
+
+  // Force sync all data
+  const handleForceSync = async () => {
+    const results = await Promise.all([
+      inventorySyncInfo.sync(),
+      transactionsSyncInfo.sync(),
+      inwardEntriesSyncInfo.sync(),
+    ])
+
+    return results.every(Boolean)
+  }
+
   // State for data persistence
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("local")
   const [showSyncDialog, setShowSyncDialog] = useState(false)
-  const [lastSyncTime, setLastSyncTime] = useState<string | undefined>(undefined)
+  // Add this state inside the GenericAadhaarERP component
+  const [showFirebaseConfigDialog, setShowFirebaseConfigDialog] = useState(false)
   const [deviceId] = useState(() => {
     if (typeof window !== "undefined") {
       const storedId = localStorage.getItem("ga-device-id")
@@ -89,7 +173,6 @@ export default function GenericAadhaarERP() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : false)
 
   // State for inventory management with localStorage persistence
-  const [inventory, setInventory] = useLocalStorage<InventoryItem[]>("ga-inventory", [])
   const [searchTerm, setSearchTerm] = useState("")
   const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
     name: "",
@@ -118,10 +201,10 @@ export default function GenericAadhaarERP() {
   const [currentInvoicePdfBlob, setCurrentInvoicePdfBlob] = useState<Blob | null>(null)
 
   // State for transactions with localStorage persistence
-  const [transactions, setTransactions] = useLocalStorage<Transaction[]>("ga-transactions", [])
+  // State for transactions with localStorage persistence
 
   // State for inward entries with localStorage persistence
-  const [inwardEntries, setInwardEntries] = useLocalStorage<InwardEntry[]>("ga-inward-entries", [])
+  // State for inward entries with localStorage persistence
   const [newInward, setNewInward] = useState<Partial<InwardEntry>>({
     date: new Date().toISOString().split("T")[0],
     invoiceNo: "",
@@ -181,9 +264,6 @@ export default function GenericAadhaarERP() {
       // Update last sync time
       const currentTime = new Date().toISOString()
       localStorage.setItem("ga-last-sync-time", currentTime)
-      setLastSyncTime(currentTime)
-
-      setSyncStatus("synced")
 
       toast({
         title: "Success",
@@ -196,7 +276,7 @@ export default function GenericAadhaarERP() {
     return () => {
       document.removeEventListener("backupRestore", handleBackupRestore)
     }
-  }, [setInventory, setTransactions, setInwardEntries])
+  }, [])
 
   // Declare the missing export functions
   const exportMostSoldReport = () => {
@@ -528,21 +608,10 @@ export default function GenericAadhaarERP() {
 
     const handleOnline = () => {
       setIsOnline(true)
-      setSyncStatus((prev) => (prev === "offline" ? "local" : prev))
-      toast({
-        title: "You are online",
-        description: "Data will now sync automatically",
-      })
     }
 
     const handleOffline = () => {
       setIsOnline(false)
-      setSyncStatus("offline")
-      toast({
-        title: "You are offline",
-        description: "Changes will be saved locally until you reconnect",
-        variant: "destructive",
-      })
     }
 
     window.addEventListener("online", handleOnline)
@@ -560,8 +629,6 @@ export default function GenericAadhaarERP() {
 
     const savedSyncTime = localStorage.getItem("ga-last-sync-time")
     if (savedSyncTime) {
-      setLastSyncTime(savedSyncTime)
-      setSyncStatus("synced")
     }
   }, [])
 
@@ -668,7 +735,6 @@ export default function GenericAadhaarERP() {
       gstRate: 5,
     })
     setShowAddInventory(false)
-    setSyncStatus("local")
 
     toast({
       title: "Success",
@@ -690,26 +756,31 @@ export default function GenericAadhaarERP() {
       updatedItems[existingItemIndex].quantity += 1
       updatedItems[existingItemIndex].total =
         updatedItems[existingItemIndex].quantity * updatedItems[existingItemIndex].price
+
       setBillingItems(updatedItems)
     } else {
-      // Add new item to billing
-      const newBillingItem: BillingItem = {
+      // Add new item
+      const newItem: BillingItem = {
         id: item.id,
         name: item.name,
         batch: item.batch,
         quantity: 1,
         price: item.price,
         total: item.price,
-        gstRate: item.gstRate, // Include the GST rate
+        gstRate: item.gstRate,
       }
-      setBillingItems([...billingItems, newBillingItem])
+      setBillingItems([...billingItems, newItem])
     }
-
-    setSelectedItem("")
   }
 
-  // Handle updating billing item quantity
-  const handleUpdateQuantity = (id: string, quantity: number) => {
+  // Handle removing item from billing
+  const handleRemoveFromBilling = (id: string) => {
+    const updatedItems = billingItems.filter((item) => item.id !== id)
+    setBillingItems(updatedItems)
+  }
+
+  // Handle quantity change in billing
+  const handleQuantityChange = (id: string, quantity: number) => {
     if (quantity < 1) return
 
     const updatedItems = billingItems.map((item) => {
@@ -726,75 +797,57 @@ export default function GenericAadhaarERP() {
     setBillingItems(updatedItems)
   }
 
-  // Handle removing item from billing
-  const handleRemoveFromBilling = (id: string) => {
-    setBillingItems(billingItems.filter((item) => item.id !== id))
+  // Handle discount change
+  const handleDiscountChange = (value: number) => {
+    setDiscount(value)
   }
 
-  // Handle generating invoice
-  const handleGenerateInvoice = () => {
+  // Handle customer info change
+  const handleCustomerInfoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setCustomerInfo({
+      ...customerInfo,
+      [name]: value,
+    })
+  }
+
+  // Handle payment method change
+  const handlePaymentMethodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setCustomerInfo({
+      ...customerInfo,
+      paymentMethod: e.target.value,
+    })
+  }
+
+  const handleCreateInvoice = () => {
     if (billingItems.length === 0) {
       toast({
         title: "Error",
-        description: "Please add items to the invoice",
+        description: "Please add items to billing",
         variant: "destructive",
       })
       return
     }
 
-    if (!customerInfo.name || !customerInfo.mobile) {
-      toast({
-        title: "Error",
-        description: "Please enter customer name and mobile number",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Create new transaction with itemized taxes
     const newTransaction: Transaction = {
       id: Date.now().toString(),
       date: new Date().toISOString().split("T")[0],
       time: new Date().toLocaleTimeString(),
-      customer: customerInfo.name,
-      mobile: customerInfo.mobile,
-      doctor: customerInfo.doctor,
-      paymentMethod: customerInfo.paymentMethod,
-      items: [...billingItems],
+      customer: customerInfo.name || "Guest",
+      mobile: customerInfo.mobile || "",
+      doctor: customerInfo.doctor || "",
+      paymentMethod: customerInfo.paymentMethod || "Cash",
+      items: billingItems,
       subtotal,
-      taxes, // Use the itemized taxes
-      totalTax, // Total tax amount
+      taxes,
+      totalTax,
       discount,
       total,
     }
 
-    // Set current invoice for preview
+    setTransactions([...transactions, newTransaction])
     setCurrentInvoice(newTransaction)
     setShowInvoicePreview(true)
-
-    // Generate PDF for sharing
-    generateInvoicePDFBlob(newTransaction)
-  }
-
-  // Handle saving invoice after preview
-  const handleSaveInvoice = () => {
-    if (!currentInvoice) return
-
-    // Update transactions
-    setTransactions([currentInvoice, ...transactions])
-
-    // Update inventory
-    const updatedInventory = [...inventory]
-    currentInvoice.items.forEach((item) => {
-      const inventoryItemIndex = updatedInventory.findIndex((i) => i.id === item.id)
-      if (inventoryItemIndex >= 0) {
-        updatedInventory[inventoryItemIndex].stock -= item.quantity
-      }
-    })
-    setInventory(updatedInventory)
-    setSyncStatus("local")
-
-    // Reset billing
     setBillingItems([])
     setCustomerInfo({
       name: "",
@@ -803,16 +856,51 @@ export default function GenericAadhaarERP() {
       paymentMethod: "",
     })
     setDiscount(0)
-    setShowInvoicePreview(false)
-    setCurrentInvoice(null)
 
     toast({
       title: "Success",
-      description: "Invoice generated successfully",
+      description: "Invoice created successfully",
     })
   }
 
-  // Handle adding inward entry
+  // Handle closing invoice preview
+  const handleCloseInvoicePreview = () => {
+    setShowInvoicePreview(false)
+    setCurrentInvoice(null)
+    setCurrentInvoicePdfBlob(null)
+  }
+
+  // Handle generating PDF
+  const handleGeneratePDF = async (invoice: Transaction) => {
+    setIsGeneratingPDF(true)
+    try {
+      const pdfBlob = await generateInvoicePDF(invoice)
+      const url = URL.createObjectURL(pdfBlob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `invoice-${invoice.id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "Success",
+        description: "Invoice PDF generated successfully",
+      })
+    } catch (error) {
+      console.error("Error generating PDF:", error)
+      toast({
+        title: "Error",
+        description: "Failed to generate invoice PDF",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingPDF(false)
+    }
+  }
+
+  // Handle adding new inward entry
   const handleAddInwardEntry = () => {
     if (!newInward.invoiceNo || !newInward.supplier || !newInward.paymentStatus) {
       toast({
@@ -823,59 +911,25 @@ export default function GenericAadhaarERP() {
       return
     }
 
-    if (inwardItems.some((item) => !item.name || !item.batch || !item.expiry)) {
-      toast({
-        title: "Error",
-        description: "Please fill all item details",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Process inward items
-    const processedItems: InventoryItem[] = inwardItems.map((item) => ({
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      name: item.name || "",
-      batch: item.batch || "",
-      stock: item.stock || 0,
-      expiry: item.expiry || "",
-      purchasePrice: item.purchasePrice || 0,
-      price: item.price || 0,
-      gstRate: item.gstRate || 5,
-    }))
-
-    // Create new inward entry
-    const totalValue = processedItems.reduce((sum, item) => sum + item.purchasePrice * item.stock, 0)
-    const newInwardEntry: InwardEntry = {
+    const entry: InwardEntry = {
       id: Date.now().toString(),
       date: newInward.date || new Date().toISOString().split("T")[0],
       invoiceNo: newInward.invoiceNo || "",
       supplier: newInward.supplier || "",
-      items: processedItems,
       paymentStatus: newInward.paymentStatus || "",
-      totalValue,
+      items: inwardItems.map((item) => ({
+        id: Date.now().toString(),
+        name: item.name || "",
+        batch: item.batch || "",
+        expiry: item.expiry || "",
+        stock: item.stock || 0,
+        purchasePrice: item.purchasePrice || 0,
+        price: item.price || 0,
+        gstRate: item.gstRate || 5,
+      })),
     }
 
-    // Update inward entries
-    setInwardEntries([newInwardEntry, ...inwardEntries])
-
-    // Update inventory
-    const updatedInventory = [...inventory]
-    processedItems.forEach((item) => {
-      const existingItemIndex = updatedInventory.findIndex((i) => i.name === item.name && i.batch === item.batch)
-
-      if (existingItemIndex >= 0) {
-        // Update existing item
-        updatedInventory[existingItemIndex].stock += item.stock
-      } else {
-        // Add new item
-        updatedInventory.push(item)
-      }
-    })
-    setInventory(updatedInventory)
-    setSyncStatus("local")
-
-    // Reset form
+    setInwardEntries([...inwardEntries, entry])
     setNewInward({
       date: new Date().toISOString().split("T")[0],
       invoiceNo: "",
@@ -901,423 +955,222 @@ export default function GenericAadhaarERP() {
     })
   }
 
-  // Handle adding a new inward item row
-  const handleAddInwardItemRow = () => {
-    setInwardItems([
-      ...inwardItems,
-      {
-        name: "",
-        batch: "",
-        expiry: "",
-        stock: 0,
-        purchasePrice: 0,
-        price: 0,
-        gstRate: 5,
-      },
-    ])
-  }
-
-  // Handle updating inward item
-  const handleUpdateInwardItem = (index: number, field: string, value: string | number) => {
-    const updatedItems = [...inwardItems]
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: value,
-    }
-    setInwardItems(updatedItems)
-  }
-
-  // Handle removing inward item
-  const handleRemoveInwardItem = (index: number) => {
-    if (inwardItems.length === 1) return
-    const updatedItems = [...inwardItems]
-    updatedItems.splice(index, 1)
-    setInwardItems(updatedItems)
-  }
-
-  // Force manual sync of all data
-  const handleManualSync = async () => {
-    setSyncStatus("syncing")
-
-    try {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      // In a real implementation, this would sync with a server or other devices
-      // For now, we'll just simulate a successful sync
-
-      // Update last sync time
-      const currentTime = new Date().toISOString()
-      localStorage.setItem("ga-last-sync-time", currentTime)
-      setLastSyncTime(currentTime)
-
-      setSyncStatus("synced")
-
+  // Handle CSV import
+  const handleImportCSV = () => {
+    if (!csvInputRef.current?.files?.length) {
       toast({
-        title: "Success",
-        description: "Data synchronized successfully",
-      })
-
-      return true
-    } catch (error) {
-      console.error("Error during manual sync:", error)
-      setSyncStatus("error")
-
-      toast({
-        title: "Sync Failed",
-        description: "Please check your internet connection and try again",
+        title: "Error",
+        description: "Please select a CSV file",
         variant: "destructive",
       })
-
-      return false
-    }
-  }
-
-  // Export data as JSON file
-  const handleExportData = () => {
-    // Prepare data for export
-    const dataToExport = {
-      inventory,
-      transactions,
-      inwardEntries,
-      lastSyncTime: new Date().toISOString(),
+      return
     }
 
-    // Convert data to JSON string
-    const jsonString = JSON.stringify(dataToExport, null, 2)
+    setIsProcessingCsv(true)
 
-    // Create a blob from the JSON string
-    const blob = new Blob([jsonString], { type: "application/json" })
-
-    // Create a URL for the blob
-    const url = URL.createObjectURL(blob)
-
-    // Create a temporary anchor element
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `generic-aadhaar-data-${new Date().toISOString().split("T")[0]}.json`
-
-    // Trigger a click on the anchor element
-    document.body.appendChild(a)
-    a.click()
-
-    // Clean up
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-
-    toast({
-      title: "Success",
-      description: "Data exported successfully",
-    })
-  }
-
-  // Import data from JSON file
-  const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
+    const file = csvInputRef.current.files[0]
     const reader = new FileReader()
 
     reader.onload = (e) => {
-      try {
-        const importedData = JSON.parse(e.target?.result as string)
+      const csv = e.target?.result as string
 
-        // Validate the imported data
-        if (!importedData.inventory || !importedData.transactions || !importedData.inwardEntries) {
-          throw new Error("Invalid data format")
-        }
+      Papa.parse(csv, {
+        header: true,
+        complete: (results) => {
+          // Assuming CSV has columns: name, batch, stock, expiry, purchasePrice, price, gstRate
+          const importedItems: InventoryItem[] = results.data
+            .filter(
+              (item: any) =>
+                item.name &&
+                item.batch &&
+                item.stock &&
+                item.expiry &&
+                item.purchasePrice &&
+                item.price &&
+                item.gstRate,
+            )
+            .map((item: any) => ({
+              id: Date.now().toString(),
+              name: item.name,
+              batch: item.batch,
+              stock: Number.parseInt(item.stock),
+              expiry: item.expiry,
+              purchasePrice: Number.parseFloat(item.purchasePrice),
+              price: Number.parseFloat(item.price),
+              gstRate: Number.parseFloat(item.gstRate),
+            }))
 
-        // Update all data states
-        setInventory(importedData.inventory)
-        setTransactions(importedData.transactions)
-        setInwardEntries(importedData.inwardEntries)
+          setInventory([...inventory, ...importedItems])
+          setIsProcessingCsv(false)
+          setShowCsvImportDialog(false)
 
-        // Update last sync time
-        const currentTime = new Date().toISOString()
-        localStorage.setItem("ga-last-sync-time", currentTime)
-        setLastSyncTime(currentTime)
-
-        toast({
-          title: "Success",
-          description: "Data imported successfully from file",
-        })
-
-        setSyncStatus("synced")
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to import data. Invalid file format.",
-          variant: "destructive",
-        })
-      }
+          toast({
+            title: "Success",
+            description: "CSV file imported successfully",
+          })
+        },
+        error: (error) => {
+          console.error("CSV parsing error:", error)
+          setIsProcessingCsv(false)
+          toast({
+            title: "Error",
+            description: "Failed to parse CSV file",
+            variant: "destructive",
+          })
+        },
+      })
     }
 
     reader.readAsText(file)
-
-    // Reset the input
-    event.target.value = ""
   }
 
-  // Handle CSV import from dialog
-  const handleCsvImport = (parsedItems: any[]) => {
-    try {
-      // Convert to inward items format
-      const newInwardItemsList = parsedItems.map((item) => ({
-        name: item.name,
-        batch: item.batch,
-        expiry: item.expiry,
-        stock: item.stock,
-        purchasePrice: item.purchasePrice,
-        price: item.price,
-        gstRate: item.gstRate,
-      }))
-
-      // Update the inward items state
-      setInwardItems(newInwardItemsList)
-
-      // Also update the inward details
-      setNewInward({
-        ...newInward,
-        date: new Date().toISOString().split("T")[0],
-        invoiceNo: `CSV-${Date.now().toString().substring(8)}`,
-        supplier: "CSV Import",
-        paymentStatus: "Paid",
-      })
-
-      toast({
-        title: "Success",
-        description: `Processed ${parsedItems.length} items from CSV`,
-      })
-    } catch (error) {
-      console.error("Error processing CSV:", error)
+  // Handle OCR scanning
+  const handleScanImage = () => {
+    if (!fileInputRef.current?.files?.length) {
       toast({
         title: "Error",
-        description: "Failed to process CSV data. Please check the format.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Handle image upload for OCR
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    // Check if file is an image
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Error",
-        description: "Please upload an image file",
+        description: "Please select an image file",
         variant: "destructive",
       })
       return
     }
 
     setIsScanning(true)
-    setScanProgress(10)
+    setScanProgress(0)
+    setScanResult("")
 
-    // Simulate OCR processing
-    setTimeout(() => {
-      setScanProgress(30)
-    }, 500)
+    const file = fileInputRef.current.files[0]
+    const reader = new FileReader()
 
-    setTimeout(() => {
-      setScanProgress(60)
-    }, 1000)
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        Tesseract.recognize(file, "eng", {
+          logger: (m) => {
+            if (m.status === "recognizing text") {
+              setScanProgress(m.progress * 100)
+            }
+          },
+        })
+          .catch((err) => {
+            console.error("Tesseract error:", err)
+            toast({
+              title: "Error",
+              description: "Failed to scan image",
+              variant: "destructive",
+            })
+          })
+          .then((result) => {
+            setIsScanning(false)
+            setScanResult(result?.data.text || "")
+          })
+      }
+      img.src = e.target?.result as string
+    }
 
-    setTimeout(() => {
-      setScanProgress(90)
+    reader.readAsDataURL(file)
+  }
 
-      // Simulate OCR result with some sample data
-      const sampleData = [
-        {
-          name: "Paracetamol",
-          batch: "PCM2023",
-          expiry: "2024-12-31",
-          stock: 100,
-          purchasePrice: 0.5,
-          price: 2,
-          gstRate: 5,
-        },
-        {
-          name: "Amoxicillin",
-          batch: "AMX2023",
-          expiry: "2024-10-15",
-          stock: 50,
-          purchasePrice: 1.2,
-          price: 5,
-          gstRate: 12,
-        },
-        {
-          name: "Cetirizine",
-          batch: "CTZ2023",
-          expiry: "2025-01-20",
-          stock: 75,
-          purchasePrice: 0.8,
-          price: 3,
-          gstRate: 5,
-        },
-      ]
+  const handleExportData = () => {
+    const dataStr = JSON.stringify({
+      inventory,
+      transactions,
+      inwardEntries,
+    })
+    const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr)
 
-      // Convert to inward items format and update the state
-      const newInwardItemsList = sampleData.map((item) => ({
-        name: item.name,
-        batch: item.batch,
-        expiry: item.expiry,
-        stock: item.stock,
-        purchasePrice: item.purchasePrice,
-        price: item.price,
-        gstRate: item.gstRate,
-      }))
+    const exportFileDefaultName = "data.json"
 
-      // Update the inward items state
-      setInwardItems(newInwardItemsList)
+    const linkElement = document.createElement("a")
+    linkElement.setAttribute("href", dataUri)
+    linkElement.setAttribute("download", exportFileDefaultName)
+    linkElement.click()
+  }
 
-      // Also update the inward details
-      setNewInward({
-        ...newInward,
-        date: new Date().toISOString().split("T")[0],
-        invoiceNo: `OCR-${Date.now().toString().substring(8)}`,
-        supplier: "OCR Import",
-        paymentStatus: "Paid",
-      })
+  const handleImportFile = (event: any) => {
+    const file = event.target.files[0]
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string)
 
-      setScanResult(JSON.stringify(sampleData, null, 2))
-      setScanProgress(100)
+        if (data.inventory) {
+          setInventory(data.inventory)
+        }
 
-      setTimeout(() => {
-        setIsScanning(false)
+        if (data.transactions) {
+          setTransactions(data.transactions)
+        }
+
+        if (data.inwardEntries) {
+          setInwardEntries(data.inwardEntries)
+        }
+
         toast({
           title: "Success",
-          description: "Image processed successfully. Found 3 items.",
+          description: "Data imported successfully from file",
         })
-      }, 500)
-    }, 2000)
-
-    event.target.value = ""
-  }
-
-  // Handle camera capture
-  const handleCameraCapture = () => {
-    setShowCamera(true)
-
-    // Simulate taking a photo and processing it
-    setTimeout(() => {
-      setShowCamera(false)
-      setIsScanning(true)
-      setScanProgress(10)
-
-      setTimeout(() => {
-        setScanProgress(50)
-
-        setTimeout(() => {
-          setScanProgress(90)
-
-          // Simulate OCR result with some sample data
-          const sampleData = [
-            { name: "Aspirin", batch: "ASP2023", expiry: "2024-11-30", stock: 80, purchasePrice: 0.6, price: 2.5 },
-            { name: "Ibuprofen", batch: "IBU2023", expiry: "2024-09-15", stock: 60, purchasePrice: 1.0, price: 4 },
-          ]
-
-          // Convert to inward items format
-          const newInwardItemsList = sampleData.map((item) => ({
-            name: item.name,
-            batch: item.batch,
-            expiry: item.expiry,
-            stock: item.stock,
-            purchasePrice: item.purchasePrice,
-            price: item.price,
-          }))
-
-          setInwardItems(newInwardItemsList)
-
-          setScanResult(JSON.stringify(sampleData, null, 2))
-          setScanProgress(100)
-
-          setTimeout(() => {
-            setIsScanning(false)
-            toast({
-              title: "Success",
-              description: "Image captured and processed successfully. Found 2 items.",
-            })
-          }, 500)
-        }, 1000)
-      }, 1000)
-    }, 2000)
-  }
-
-  // Generate PDF for invoice and return as blob
-  const generateInvoicePDFBlob = async (invoice: Transaction) => {
-    setIsGeneratingPDF(true)
-
-    try {
-      // Use the utility function to generate PDF
-      const pdfBlob = await generateInvoicePDF(invoice)
-      setCurrentInvoicePdfBlob(pdfBlob)
-      setIsGeneratingPDF(false)
-      return pdfBlob
-    } catch (error) {
-      console.error("Failed to generate PDF:", error)
-      setIsGeneratingPDF(false)
-      toast({
-        title: "Error",
-        description: "Failed to generate PDF",
-        variant: "destructive",
-      })
-      return null
-    }
-  }
-
-  // Handle downloading invoice PDF
-  const handleDownloadInvoicePDF = async (invoice: Transaction) => {
-    setIsGeneratingPDF(true)
-
-    try {
-      // Generate PDF if not already generated
-      let pdfBlob = currentInvoicePdfBlob
-      if (!pdfBlob) {
-        pdfBlob = await generateInvoicePDF(invoice)
-        setCurrentInvoicePdfBlob(pdfBlob)
+      } catch (error) {
+        console.error("Error importing data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to import data from file",
+          variant: "destructive",
+        })
       }
-
-      // Create a URL for the blob
-      const url = URL.createObjectURL(pdfBlob)
-
-      // Create a temporary anchor element
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `Invoice-${invoice.id}.pdf`
-
-      // Trigger a click on the anchor element
-      document.body.appendChild(a)
-      a.click()
-
-      // Clean up
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
-      toast({
-        title: "Success",
-        description: "Invoice PDF downloaded successfully",
-      })
-    } catch (error) {
-      console.error("Failed to download PDF:", error)
-      toast({
-        title: "Error",
-        description: "Failed to download PDF",
-        variant: "destructive",
-      })
-    } finally {
-      setIsGeneratingPDF(false)
     }
+    reader.readAsText(file)
   }
 
-  // Return the JSX for the component
+  // Add this function inside the GenericAadhaarERP component
+  const handleConfigureFirebase = () => {
+    setShowFirebaseConfigDialog(true)
+  }
+
   return (
-    <div>
-      {/* Your JSX code here */}
-      <h1>Generic Aadhaar ERP</h1>
-      {/* Rest of your UI components */}
+    <div className="p-4 bg-gradient-to-br from-sky-50 to-blue-100 min-h-screen text-gray-800">
+      {/* Header */}
+      <header className="flex justify-between items-center mb-4">
+        <h1 className="text-3xl font-bold">🧬 Generic Aadhaar - Pharmacy ERP</h1>
+        <div className="flex items-center gap-2">
+          <SyncStatusIndicator
+            status={syncStatus}
+            lastSyncTime={lastSyncTime}
+            isOnline={inventorySyncInfo.isOnline}
+            connectedDevices={connectedDevices}
+            onSync={handleForceSync}
+            hasValidApiKey={inventorySyncInfo.hasValidApiKey}
+            onConfigureFirebase={handleConfigureFirebase}
+          />
+          <Button variant="ghost" size="sm" onClick={() => setShowSyncDialog(true)}>
+            Sync
+          </Button>
+          <span className="text-sm text-gray-600">{date}</span>
+        </div>
+      </header>
+
+      {/* Rest of your component JSX */}
+
+      {/* Enhanced sync dialog */}
+      <EnhancedSyncDialog
+        open={showSyncDialog}
+        onOpenChange={setShowSyncDialog}
+        deviceId={inventorySyncInfo.deviceId}
+        syncStatus={syncStatus}
+        isOnline={inventorySyncInfo.isOnline}
+        lastSyncTime={lastSyncTime}
+        onSync={handleForceSync}
+        onExport={handleExportData}
+        onImport={handleImportFile}
+        data={{
+          inventory,
+          transactions,
+          inwardEntries,
+        }}
+        connectedDevices={connectedDevices}
+      />
+      {/* Add this JSX right before the closing </div> at the end of the component */}
+      <FirebaseConfigDialog open={showFirebaseConfigDialog} onOpenChange={setShowFirebaseConfigDialog} />
     </div>
   )
 }
