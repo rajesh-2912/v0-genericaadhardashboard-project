@@ -17,6 +17,9 @@ import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
 import enhancedSyncService from "../utils/enhanced-sync-service"
 
+// Check if we're in the browser environment
+const isBrowser = typeof window !== "undefined"
+
 interface FirebaseConfigDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -42,6 +45,15 @@ export default function FirebaseConfigDialog({ open, onOpenChange }: FirebaseCon
     setIsSubmitting(true)
 
     try {
+      if (!isBrowser) {
+        toast({
+          title: "Error",
+          description: "Browser environment required",
+          variant: "destructive",
+        })
+        return
+      }
+
       const success = enhancedSyncService.updateFirebaseConfig(apiKey, projectId)
 
       if (success) {

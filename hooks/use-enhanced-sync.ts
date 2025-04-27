@@ -3,19 +3,23 @@
 import { useState, useEffect, useRef } from "react"
 import enhancedSyncService, { type SyncStatus, type SyncInfo } from "../utils/enhanced-sync-service"
 
+// Check if we're in the browser environment
+const isBrowser = typeof window !== "undefined"
+
 export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) => void, SyncStatus, SyncInfo] {
   // State for data and sync status
   const [data, setData] = useState<T>(initialData)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("local")
   const [syncInfo, setSyncInfo] = useState<SyncInfo>({
-    deviceId: enhancedSyncService.getDeviceId(),
-    isOnline: typeof navigator !== "undefined" ? navigator.onLine : false,
-    lastSyncTime: enhancedSyncService.getLastSyncTime() || undefined,
-    connectedDevices: enhancedSyncService.getConnectedDevices(),
+    deviceId: isBrowser ? enhancedSyncService.getDeviceId() : "server",
+    isOnline: isBrowser ? navigator.onLine : false,
+    lastSyncTime: isBrowser ? enhancedSyncService.getLastSyncTime() || undefined : undefined,
+    connectedDevices: isBrowser ? enhancedSyncService.getConnectedDevices() : [],
     sync: async () => {
+      if (!isBrowser) return false
       return await enhancedSyncService.forceSync()
     },
-    hasValidApiKey: enhancedSyncService.isApiKeyValid(), // Changed from getHasValidApiKey to isApiKeyValid
+    hasValidApiKey: isBrowser ? enhancedSyncService.isApiKeyValid() : false,
   })
 
   // Use refs to avoid stale closures and prevent unnecessary re-renders
@@ -26,7 +30,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
 
   // Initialize from localStorage only once
   useEffect(() => {
-    if (typeof window === "undefined" || initializedRef.current) return
+    if (!isBrowser || initializedRef.current) return
 
     initializedRef.current = true
 
@@ -45,10 +49,12 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
 
   // Initialize sync service once
   useEffect(() => {
+    if (!isBrowser) return
+
     let isMounted = true
 
     // Check if we have a valid API key
-    const hasValidApiKey = enhancedSyncService.isApiKeyValid() // Changed from getHasValidApiKey to isApiKeyValid
+    const hasValidApiKey = enhancedSyncService.isApiKeyValid()
 
     // Set initial status based on API key availability
     if (!hasValidApiKey) {
@@ -62,7 +68,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
       setSyncInfo((prev) => ({
         ...prev,
         lastSyncTime: enhancedSyncService.getLastSyncTime() || undefined,
-        hasValidApiKey: enhancedSyncService.isApiKeyValid(), // Changed from getHasValidApiKey to isApiKeyValid
+        hasValidApiKey: enhancedSyncService.isApiKeyValid(),
       }))
     })
 
@@ -73,7 +79,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
       const newStatus = enhancedSyncService.getSyncStatus()
       const newLastSyncTime = enhancedSyncService.getLastSyncTime() || undefined
       const newConnectedDevices = enhancedSyncService.getConnectedDevices()
-      const newHasValidApiKey = enhancedSyncService.isApiKeyValid() // Changed from getHasValidApiKey to isApiKeyValid
+      const newHasValidApiKey = enhancedSyncService.isApiKeyValid()
 
       // Only update if values have changed to prevent unnecessary re-renders
       setSyncStatus((prevStatus) => (prevStatus !== newStatus ? newStatus : prevStatus))
@@ -105,6 +111,8 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
 
   // Subscribe to changes
   useEffect(() => {
+    if (!isBrowser) return
+
     let isMounted = true
 
     const unsubscribe = enhancedSyncService.subscribe<T>(key, dataRef.current, (newData) => {
@@ -131,7 +139,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
 
   // Update online status
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (!isBrowser) return
 
     let isMounted = true
 
@@ -157,6 +165,8 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
 
   // Function to update data
   const updateData = (value: T) => {
+    if (!isBrowser) return
+
     // Allow value to be a function
     const valueToStore = value instanceof Function ? value(dataRef.current) : value
 

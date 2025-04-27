@@ -1,13 +1,5 @@
-"use client"
+import SimpleERP from "./simple-erp"
 
-import GenericAadhaarERP from "../generic-aadhaar-erp"
-import { Toaster } from "@/components/ui/toaster"
-
-export default function Page() {
-  return (
-    <>
-      <GenericAadhaarERP />
-      <Toaster />
-    </>
-  )
+export default function Home() {
+  return <SimpleERP />
 }
