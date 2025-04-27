@@ -7,6 +7,7 @@ import { getAuth, signInAnonymously } from "firebase/auth"
 let app: any
 let database: any
 let auth: any
+let isAuthEnabled = true
 
 try {
   // Get existing Firebase app if it exists
@@ -29,13 +30,6 @@ try {
   auth = getAuth(app)
 }
 
-// Your web app's Firebase configuration
-
-// Initialize Firebase
-//const app = initializeApp(firebaseConfig)
-//const database = getDatabase(app)
-//const auth = getAuth(app)
-
 // Generate a unique store ID or retrieve from localStorage
 const getStoreId = () => {
   if (typeof window === "undefined") {
@@ -55,20 +49,40 @@ const storeId = getStoreId()
 
 // Sign in anonymously to Firebase
 const signInToFirebase = async () => {
+  if (!isAuthEnabled) {
+    return false
+  }
+
   try {
     await signInAnonymously(auth)
     console.log("Signed in anonymously to Firebase")
     return true
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error signing in anonymously:", error)
+
+    // Check for specific error codes
+    if (error.code === "auth/admin-restricted-operation") {
+      console.warn("Anonymous authentication is disabled for this Firebase project. Operating in local-only mode.")
+      isAuthEnabled = false
+    }
+
     return false
   }
 }
 
 // Save data to Firebase
 export const saveToFirebase = async (data: any) => {
+  if (!isAuthEnabled) {
+    console.log("Authentication is disabled. Operating in local-only mode.")
+    return false
+  }
+
   try {
-    await signInToFirebase()
+    const signInSuccess = await signInToFirebase()
+    if (!signInSuccess) {
+      return false
+    }
+
     await set(ref(database, `stores/${storeId}`), {
       ...data,
       lastUpdated: new Date().toISOString(),
@@ -82,8 +96,17 @@ export const saveToFirebase = async (data: any) => {
 
 // Update specific data in Firebase
 export const updateFirebaseData = async (path: string, data: any) => {
+  if (!isAuthEnabled) {
+    console.log("Authentication is disabled. Operating in local-only mode.")
+    return false
+  }
+
   try {
-    await signInToFirebase()
+    const signInSuccess = await signInToFirebase()
+    if (!signInSuccess) {
+      return false
+    }
+
     const updates: any = {}
     updates[`stores/${storeId}/${path}`] = data
     updates[`stores/${storeId}/lastUpdated`] = new Date().toISOString()
@@ -97,8 +120,17 @@ export const updateFirebaseData = async (path: string, data: any) => {
 
 // Get data from Firebase
 export const getFromFirebase = async () => {
+  if (!isAuthEnabled) {
+    console.log("Authentication is disabled. Operating in local-only mode.")
+    return null
+  }
+
   try {
-    await signInToFirebase()
+    const signInSuccess = await signInToFirebase()
+    if (!signInSuccess) {
+      return null
+    }
+
     const snapshot = await get(ref(database, `stores/${storeId}`))
     if (snapshot.exists()) {
       return snapshot.val()
@@ -116,8 +148,15 @@ export const getFromFirebase = async () => {
 export const subscribeToFirebase = (callback: (data: any) => void) => {
   let unsubscribed = false
 
-  signInToFirebase().then(() => {
-    if (unsubscribed) return
+  if (!isAuthEnabled) {
+    console.log("Authentication is disabled. Cannot subscribe to Firebase updates.")
+    return () => {
+      unsubscribed = true
+    }
+  }
+
+  signInToFirebase().then((success) => {
+    if (unsubscribed || !success) return
 
     const dataRef = ref(database, `stores/${storeId}`)
     onValue(dataRef, (snapshot) => {

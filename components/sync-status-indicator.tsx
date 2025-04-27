@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CloudOff, CloudIcon as CloudSync, Cloud, AlertCircle, Wifi, WifiOff, Settings } from "lucide-react"
+import { CloudOff, CloudIcon as CloudSync, Cloud, AlertCircle, Wifi, WifiOff, Settings, Lock } from "lucide-react"
 import type { SyncStatus } from "../utils/enhanced-sync-service"
 
 interface SyncStatusIndicatorProps {
@@ -77,6 +77,8 @@ export default function SyncStatusIndicator({
         return iconWrapper(<WifiOff className="h-4 w-4 text-gray-500" />)
       case "no-api-key":
         return iconWrapper(<Settings className="h-4 w-4 text-amber-500" />)
+      case "auth-disabled":
+        return iconWrapper(<Lock className="h-4 w-4 text-amber-500" />)
       default:
         return iconWrapper(<Cloud className="h-4 w-4" />)
     }
@@ -103,6 +105,8 @@ export default function SyncStatusIndicator({
         return "Disconnected"
       case "no-api-key":
         return "Firebase Not Configured"
+      case "auth-disabled":
+        return "Auth Disabled"
       default:
         return "Unknown"
     }
@@ -128,7 +132,7 @@ export default function SyncStatusIndicator({
             size="sm"
             className="h-8 w-8 p-0"
             onClick={handleSync}
-            disabled={isSyncing || !isOnline || !hasValidApiKey}
+            disabled={isSyncing || !isOnline || !hasValidApiKey || status === "auth-disabled"}
           >
             {getStatusIcon()}
             <span className="sr-only">{getStatusText()}</span>
@@ -148,21 +152,18 @@ export default function SyncStatusIndicator({
               </div>
             )}
 
-            {hasValidApiKey && connectedDevices.length > 0 && (
-              <div>
-                <p className="text-sm font-medium">Connected Devices:</p>
-                <ul className="text-xs list-disc list-inside">
-                  {connectedDevices.map((device, index) => (
-                    <li key={index} className="flex items-center gap-1">
-                      <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
-                      {device}
-                    </li>
-                  ))}
-                </ul>
+            {status === "auth-disabled" && (
+              <div className="mt-2">
+                <p className="text-sm text-amber-600 mb-2">
+                  Anonymous authentication is disabled for this Firebase project. Cloud sync is unavailable.
+                </p>
+                <p className="text-xs text-gray-500">
+                  To enable cloud sync, enable Anonymous Authentication in your Firebase Authentication settings.
+                </p>
               </div>
             )}
 
-            {hasValidApiKey && isOnline && (
+            {hasValidApiKey && isOnline && status !== "auth-disabled" && (
               <Button size="sm" onClick={handleSync} disabled={isSyncing} className="w-full">
                 {isSyncing ? "Syncing..." : "Sync Now"}
               </Button>

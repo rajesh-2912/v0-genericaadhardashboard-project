@@ -63,8 +63,8 @@
     "nanoid": "latest",
     "papaparse": "latest",
     "jspdf-autotable": "latest",
-    "firebase": "latest",
-    "tesseract.js": "latest"
+    "tesseract.js": "latest",
+    "firebase": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

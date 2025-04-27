@@ -23,6 +23,7 @@ import {
   Tablet,
   Wifi,
   WifiOff,
+  Lock,
 } from "lucide-react"
 import type { SyncStatus } from "../utils/enhanced-sync-service"
 
@@ -147,6 +148,8 @@ export default function SyncStatusPanel({
         return <WifiOff className="h-5 w-5 text-gray-500" />
       case "no-api-key":
         return <AlertCircle className="h-5 w-5 text-amber-500" />
+      case "auth-disabled":
+        return <Lock className="h-5 w-5 text-amber-500" />
       default:
         return <Cloud className="h-5 w-5" />
     }
@@ -174,6 +177,8 @@ export default function SyncStatusPanel({
         return "Disconnected"
       case "no-api-key":
         return "Firebase Not Configured"
+      case "auth-disabled":
+        return "Anonymous Auth Disabled"
       default:
         return "Unknown"
     }
@@ -264,6 +269,24 @@ export default function SyncStatusPanel({
                 <span className="text-sm">{connectedDevices.length}</span>
               </div>
             </div>
+
+            {syncStatus === "auth-disabled" && (
+              <div className="rounded-md bg-amber-50 p-3">
+                <div className="flex">
+                  <Lock className="h-5 w-5 text-amber-400 mr-2" />
+                  <div>
+                    <h3 className="text-sm font-medium text-amber-800">Anonymous Authentication Disabled</h3>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Anonymous authentication is disabled in your Firebase project. Cloud sync is unavailable.
+                    </p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      To enable cloud sync, go to your Firebase Console, navigate to Authentication, and enable the
+                      Anonymous sign-in method.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {!hasValidApiKey ? (
               <div className="rounded-md bg-amber-50 p-3">

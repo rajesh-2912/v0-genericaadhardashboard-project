@@ -130,6 +130,7 @@ export type SyncStatus =
   | "connected"
   | "disconnected"
   | "no-api-key"
+  | "auth-disabled"
 
 export interface SyncInfo {
   deviceId: string
@@ -184,7 +185,8 @@ class EnhancedSyncService {
   private heartbeatInterval: NodeJS.Timeout | null = null
   private reconnectTimeout: NodeJS.Timeout | null = null
   private connectedDevices: string[] = []
-  private _apiKeyValid = false // Renamed from hasValidApiKey to _apiKeyValid
+  private _apiKeyValid = false
+  private _authEnabled = true // New flag to track if auth is enabled
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -246,7 +248,12 @@ class EnhancedSyncService {
 
     try {
       // Authenticate with Firebase
-      await this.authenticate()
+      const authResult = await this.authenticate()
+
+      if (!authResult) {
+        // If authentication fails, we'll operate in local-only mode
+        return false
+      }
 
       // Set up presence system
       this.setupPresence()
@@ -277,15 +284,22 @@ class EnhancedSyncService {
     try {
       await signInAnonymously(auth)
       this.isAuthenticated = true
+      this._authEnabled = true
       return true
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error authenticating with Firebase:", error)
       this.isAuthenticated = false
 
-      // If authentication fails due to API key, update status
-      if (error.toString().includes("api-key-not-valid")) {
+      // Check for specific error codes
+      if (error.code === "auth/admin-restricted-operation") {
+        console.warn("Anonymous authentication is disabled for this Firebase project. Operating in local-only mode.")
+        this._authEnabled = false
+        this.syncStatus = "auth-disabled"
+      } else if (error.toString().includes("api-key-not-valid")) {
         this._apiKeyValid = false
         this.syncStatus = "no-api-key"
+      } else {
+        this.syncStatus = "error"
       }
 
       return false
@@ -362,6 +376,8 @@ class EnhancedSyncService {
 
     if (!this._apiKeyValid) {
       this.syncStatus = "no-api-key"
+    } else if (!this._authEnabled) {
+      this.syncStatus = "auth-disabled"
     } else {
       this.syncStatus = "local"
       // Try to reconnect
@@ -392,7 +408,7 @@ class EnhancedSyncService {
     }
 
     this.reconnectTimeout = setTimeout(async () => {
-      if (this.isOnline && this._apiKeyValid) {
+      if (this.isOnline && this._apiKeyValid && this._authEnabled) {
         await this.initialize()
         this.processPendingChanges()
       }
@@ -476,8 +492,8 @@ class EnhancedSyncService {
 
     this.listeners.set(path, callback)
 
-    // If offline or no valid API key, just return the unsubscribe function
-    if (!this.isOnline || !this.isAuthenticated || !database || !this._apiKeyValid) {
+    // If offline, no valid API key, or auth disabled, just return the unsubscribe function
+    if (!this.isOnline || !this.isAuthenticated || !database || !this._apiKeyValid || !this._authEnabled) {
       return () => {
         this.listeners.delete(path)
       }
@@ -546,11 +562,19 @@ class EnhancedSyncService {
       id: `${deviceId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     }
 
-    // If offline, no valid API key, or not authenticated, add to pending changes
-    if (!this.isOnline || !this.isAuthenticated || !database || !this._apiKeyValid) {
+    // If offline, no valid API key, not authenticated, or auth disabled, add to pending changes
+    if (!this.isOnline || !this.isAuthenticated || !database || !this._apiKeyValid || !this._authEnabled) {
       this.pendingChanges.push(change)
       localStorage.setItem("ga-pending-changes", JSON.stringify(this.pendingChanges))
-      this.syncStatus = this._apiKeyValid ? "local" : "no-api-key"
+
+      if (!this._apiKeyValid) {
+        this.syncStatus = "no-api-key"
+      } else if (!this._authEnabled) {
+        this.syncStatus = "auth-disabled"
+      } else {
+        this.syncStatus = "local"
+      }
+
       return true
     }
 
@@ -596,12 +620,20 @@ class EnhancedSyncService {
       return false
     }
 
+    if (!this._authEnabled) {
+      this.syncStatus = "auth-disabled"
+      return false
+    }
+
     this.syncStatus = "syncing"
 
     try {
       // Re-authenticate if needed
       if (!this.isAuthenticated) {
-        await this.authenticate()
+        const authResult = await this.authenticate()
+        if (!authResult) {
+          return false
+        }
       }
 
       // Process any pending changes
@@ -637,6 +669,7 @@ class EnhancedSyncService {
       // Reinitialize Firebase
       const success = initializeFirebase()
       this._apiKeyValid = success
+      this._authEnabled = true // Reset auth enabled flag when config changes
 
       if (success) {
         this.syncStatus = this.isOnline ? "local" : "offline"
@@ -686,6 +719,13 @@ class EnhancedSyncService {
    */
   isApiKeyValid(): boolean {
     return this._apiKeyValid
+  }
+
+  /**
+   * Check if authentication is enabled
+   */
+  isAuthEnabled(): boolean {
+    return this._authEnabled
   }
 
   /**
