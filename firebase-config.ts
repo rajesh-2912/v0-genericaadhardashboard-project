@@ -38,6 +38,10 @@ try {
 
 // Generate a unique store ID or retrieve from localStorage
 const getStoreId = () => {
+  if (typeof window === "undefined") {
+    return "default_store_id"
+  }
+
   let storeId = localStorage.getItem("ga-store-id")
   if (!storeId) {
     storeId = "store_" + Math.random().toString(36).substring(2, 15)

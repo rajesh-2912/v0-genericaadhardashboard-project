@@ -29,6 +29,10 @@ let firebaseInitialized = false
 
 // Check if we have a stored Firebase config
 const getStoredFirebaseConfig = () => {
+  if (typeof window === "undefined") {
+    return null
+  }
+
   try {
     const storedConfig = localStorage.getItem("firebase-config")
     if (storedConfig) {
@@ -138,6 +142,10 @@ export interface SyncInfo {
 
 // Generate a unique store ID or retrieve from localStorage
 const getStoreId = () => {
+  if (typeof window === "undefined") {
+    return "default_store_id"
+  }
+
   let storeId = localStorage.getItem("ga-store-id")
   if (!storeId) {
     storeId = "store_" + Math.random().toString(36).substring(2, 15)
@@ -148,6 +156,10 @@ const getStoreId = () => {
 
 // Generate a unique device ID or retrieve from localStorage
 const getDeviceId = () => {
+  if (typeof window === "undefined") {
+    return "default_device_id"
+  }
+
   let deviceId = localStorage.getItem("ga-device-id")
   if (!deviceId) {
     deviceId = "device_" + Math.random().toString(36).substring(2, 15)
