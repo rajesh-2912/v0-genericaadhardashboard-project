@@ -8,9 +8,6 @@ let app: any
 let database: any
 let auth: any
 
-// Check if we're in the browser environment
-const isBrowser = typeof window !== "undefined"
-
 try {
   // Get existing Firebase app if it exists
   app = getApp()
@@ -27,20 +24,20 @@ try {
     messagingSenderId: "xxxxxxxxxxxx",
     appId: "1:xxxxxxxxxxxx:web:xxxxxxxxxxxxxxxxxxxx",
   }
-
-  // Only initialize Firebase in the browser
-  if (isBrowser) {
-    app = initializeApp(firebaseConfig)
-    database = getDatabase(app)
-    auth = getAuth(app)
-  }
+  app = initializeApp(firebaseConfig)
+  database = getDatabase(app)
+  auth = getAuth(app)
 }
+
+// Your web app's Firebase configuration
+
+// Initialize Firebase
+//const app = initializeApp(firebaseConfig)
+//const database = getDatabase(app)
+//const auth = getAuth(app)
 
 // Generate a unique store ID or retrieve from localStorage
 const getStoreId = () => {
-  // Only access localStorage in the browser
-  if (!isBrowser) return "default_store_id"
-
   let storeId = localStorage.getItem("ga-store-id")
   if (!storeId) {
     storeId = "store_" + Math.random().toString(36).substring(2, 15)
@@ -54,9 +51,6 @@ const storeId = getStoreId()
 
 // Sign in anonymously to Firebase
 const signInToFirebase = async () => {
-  // Only attempt to sign in if in browser and auth is available
-  if (!isBrowser || !auth) return false
-
   try {
     await signInAnonymously(auth)
     console.log("Signed in anonymously to Firebase")
@@ -69,9 +63,6 @@ const signInToFirebase = async () => {
 
 // Save data to Firebase
 export const saveToFirebase = async (data: any) => {
-  // Only attempt to save if in browser and database is available
-  if (!isBrowser || !database) return false
-
   try {
     await signInToFirebase()
     await set(ref(database, `stores/${storeId}`), {
@@ -87,9 +78,6 @@ export const saveToFirebase = async (data: any) => {
 
 // Update specific data in Firebase
 export const updateFirebaseData = async (path: string, data: any) => {
-  // Only attempt to update if in browser and database is available
-  if (!isBrowser || !database) return false
-
   try {
     await signInToFirebase()
     const updates: any = {}
@@ -105,9 +93,6 @@ export const updateFirebaseData = async (path: string, data: any) => {
 
 // Get data from Firebase
 export const getFromFirebase = async () => {
-  // Only attempt to get data if in browser and database is available
-  if (!isBrowser || !database) return null
-
   try {
     await signInToFirebase()
     const snapshot = await get(ref(database, `stores/${storeId}`))
@@ -125,11 +110,6 @@ export const getFromFirebase = async () => {
 
 // Subscribe to real-time updates
 export const subscribeToFirebase = (callback: (data: any) => void) => {
-  // Only attempt to subscribe if in browser and database is available
-  if (!isBrowser || !database) {
-    return () => {} // Return empty unsubscribe function
-  }
-
   let unsubscribed = false
 
   signInToFirebase().then(() => {
@@ -149,9 +129,7 @@ export const subscribeToFirebase = (callback: (data: any) => void) => {
   // Return unsubscribe function
   return () => {
     unsubscribed = true
-    if (database) {
-      off(ref(database, `stores/${storeId}`))
-    }
+    off(ref(database, `stores/${storeId}`))
   }
 }
 

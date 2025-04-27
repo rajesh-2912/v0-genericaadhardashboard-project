@@ -21,9 +21,6 @@ import {
 import { getAuth, signInAnonymously, type Auth } from "firebase/auth"
 import type { InventoryItem, Transaction, InwardEntry } from "../types/erp-types"
 
-// Check if we're in the browser environment
-const isBrowser = typeof window !== "undefined"
-
 // Firebase configuration
 let app: FirebaseApp | null = null
 let database: Database | null = null
@@ -32,8 +29,6 @@ let firebaseInitialized = false
 
 // Check if we have a stored Firebase config
 const getStoredFirebaseConfig = () => {
-  if (!isBrowser) return null
-
   try {
     const storedConfig = localStorage.getItem("firebase-config")
     if (storedConfig) {
@@ -47,8 +42,6 @@ const getStoredFirebaseConfig = () => {
 
 // Try to initialize Firebase
 const initializeFirebase = () => {
-  if (!isBrowser) return false
-
   try {
     // First try to get existing Firebase app
     try {
@@ -103,10 +96,8 @@ const initializeFirebase = () => {
   }
 }
 
-// Initialize Firebase only in browser
-if (isBrowser) {
-  initializeFirebase()
-}
+// Initialize Firebase
+initializeFirebase()
 
 // Types for our data
 export type SyncData = {
@@ -147,8 +138,6 @@ export interface SyncInfo {
 
 // Generate a unique store ID or retrieve from localStorage
 const getStoreId = () => {
-  if (!isBrowser) return "default_store_id"
-
   let storeId = localStorage.getItem("ga-store-id")
   if (!storeId) {
     storeId = "store_" + Math.random().toString(36).substring(2, 15)
@@ -159,8 +148,6 @@ const getStoreId = () => {
 
 // Generate a unique device ID or retrieve from localStorage
 const getDeviceId = () => {
-  if (!isBrowser) return "default_device_id"
-
   let deviceId = localStorage.getItem("ga-device-id")
   if (!deviceId) {
     deviceId = "device_" + Math.random().toString(36).substring(2, 15)
@@ -177,7 +164,7 @@ class EnhancedSyncService {
   private listeners: Map<string, Function> = new Map()
   private unsubscribers: Map<string, Function> = new Map()
   private isAuthenticated = false
-  private isOnline: boolean = isBrowser ? navigator.onLine : false
+  private isOnline: boolean = typeof navigator !== "undefined" ? navigator.onLine : false
   private syncStatus: SyncStatus = "local"
   private lastSyncTime: string | null = null
   private pendingChanges: SyncEvent[] = []
@@ -188,7 +175,7 @@ class EnhancedSyncService {
   private _apiKeyValid = false // Renamed from hasValidApiKey to _apiKeyValid
 
   constructor() {
-    if (isBrowser) {
+    if (typeof window !== "undefined") {
       window.addEventListener("online", this.handleOnline)
       window.addEventListener("offline", this.handleOffline)
 
@@ -233,9 +220,6 @@ class EnhancedSyncService {
    * Initialize the sync service
    */
   async initialize(): Promise<boolean> {
-    // If not in browser, return false
-    if (!isBrowser) return false
-
     // If no valid API key, operate in local-only mode
     if (!this._apiKeyValid) {
       this.syncStatus = "no-api-key"
@@ -273,7 +257,7 @@ class EnhancedSyncService {
    * Authenticate with Firebase
    */
   private async authenticate(): Promise<boolean> {
-    if (!auth || !this._apiKeyValid || !isBrowser) {
+    if (!auth || !this._apiKeyValid) {
       this.isAuthenticated = false
       return false
     }
@@ -300,7 +284,7 @@ class EnhancedSyncService {
    * Set up presence system to track connected devices
    */
   private setupPresence() {
-    if (!this.isAuthenticated || !database || !isBrowser) return
+    if (!this.isAuthenticated || !database) return
 
     const presenceRef = ref(database, `stores/${storeId}/presence/${deviceId}`)
     const connectedRef = ref(database, ".info/connected")
@@ -346,8 +330,6 @@ class EnhancedSyncService {
    * Set up heartbeat to keep connection alive
    */
   private setupHeartbeat() {
-    if (!isBrowser) return
-
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval)
     }
@@ -393,8 +375,6 @@ class EnhancedSyncService {
    * Reconnect to Firebase
    */
   private reconnect() {
-    if (!isBrowser) return
-
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout)
     }
@@ -412,7 +392,6 @@ class EnhancedSyncService {
    */
   private async processPendingChanges() {
     if (
-      !isBrowser ||
       this.isProcessingChanges ||
       !this.isOnline ||
       !this.isAuthenticated ||
@@ -455,7 +434,7 @@ class EnhancedSyncService {
    * Push a change to the server
    */
   private async pushChangeToServer(change: SyncEvent): Promise<boolean> {
-    if (!isBrowser || !this.isAuthenticated || !database) return false
+    if (!this.isAuthenticated || !database) return false
 
     try {
       const eventsRef = ref(database, `stores/${storeId}/events`)
@@ -477,8 +456,6 @@ class EnhancedSyncService {
    * Subscribe to data changes
    */
   subscribe<T>(path: string, initialData: T, callback: (data: T) => void): () => void {
-    if (!isBrowser) return () => {}
-
     if (this.unsubscribers.has(path)) {
       // Unsubscribe from existing subscription
       const unsubscribe = this.unsubscribers.get(path) as Function
@@ -547,8 +524,6 @@ class EnhancedSyncService {
    * Update data
    */
   async update<T>(path: string, data: T): Promise<boolean> {
-    if (!isBrowser) return false
-
     // Create a change event
     const change: SyncEvent = {
       type: "update",
@@ -600,8 +575,6 @@ class EnhancedSyncService {
    * Force sync
    */
   async forceSync(): Promise<boolean> {
-    if (!isBrowser) return false
-
     if (!this.isOnline) {
       return false
     }
@@ -639,8 +612,6 @@ class EnhancedSyncService {
    * Update Firebase configuration
    */
   updateFirebaseConfig(apiKey: string, projectId: string): boolean {
-    if (!isBrowser) return false
-
     try {
       // Save the new configuration
       localStorage.setItem(
@@ -709,8 +680,6 @@ class EnhancedSyncService {
    * Clean up
    */
   cleanup() {
-    if (!isBrowser) return
-
     // Remove event listeners
     window.removeEventListener("online", this.handleOnline)
     window.removeEventListener("offline", this.handleOffline)
@@ -741,24 +710,6 @@ const enhancedSyncService = new EnhancedSyncService()
 export default enhancedSyncService
 
 export function createEnhancedSyncService<T>(collectionName: string, deviceId: string) {
-  // Check if we're in the browser
-  if (!isBrowser) {
-    // Return a dummy service for SSR
-    return {
-      subscribe: (_initialData: T, _listener: any) => () => {},
-      updateData: (_data: T) => {},
-      forceSync: async () => false,
-      getStatus: () => ({
-        status: "local" as SyncStatus,
-        lastSyncTime: undefined,
-        isOnline: false,
-        connectedDevices: [],
-        deviceId: "server",
-        hasValidApiKey: false,
-      }),
-    }
-  }
-
   // References to Firebase paths
   const collectionRef = database ? ref(database, `data/${collectionName}`) : null
   const deviceStatusRef = database ? ref(database, `status/${deviceId}`) : null
@@ -767,7 +718,7 @@ export function createEnhancedSyncService<T>(collectionName: string, deviceId: s
   // Local state
   let localData: T
   let lastSyncTime: string | undefined
-  let isOnline = navigator.onLine
+  let isOnline = typeof navigator !== "undefined" ? navigator.onLine : false
   let connectedDevices: string[] = []
   let syncStatus: SyncStatus = firebaseInitialized ? "local" : "no-api-key"
   let listeners: Array<(data: T, status: SyncStatus, info: SyncInfo) => void> = []
@@ -775,6 +726,8 @@ export function createEnhancedSyncService<T>(collectionName: string, deviceId: s
 
   // Set up device presence
   const setupPresence = () => {
+    if (typeof window === "undefined" || !database || !firebaseInitialized) return
+
     // Set device as online when connected
     const connectionRef = ref(database, ".info/connected")
     onValue(connectionRef, (snapshot) => {
@@ -954,8 +907,10 @@ export function createEnhancedSyncService<T>(collectionName: string, deviceId: s
   }
 
   // Set up online/offline listeners
-  window.addEventListener("online", () => updateOnlineStatus(true))
-  window.addEventListener("offline", () => updateOnlineStatus(false))
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", () => updateOnlineStatus(true))
+    window.addEventListener("offline", () => updateOnlineStatus(false))
+  }
 
   // Notify all listeners of changes
   const notifyListeners = () => {

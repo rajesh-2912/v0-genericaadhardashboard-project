@@ -1,972 +1,780 @@
-'use client'
+"use client"
 
-import React, { useState, useEffect } from 'react'
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
-} from '@/components/ui/tabs'
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardFooter, 
-  CardHeader, 
-  CardTitle 
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from '@/components/ui/dialog'
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Camera, FileSpreadsheet, FileText, Loader2, PackagePlus, Save, Search, Upload, X, Zap, FileCheck, Truck, Calendar, BarChart4, ListChecks, Tag } from 'lucide-react'
-import { CSVImportDialog } from './csv-import-dialog'
-import { useToast } from '@/hooks/use-toast'
+import type React from "react"
+import { useState, useRef, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertCircle,
+  ScanBarcodeIcon as BarcodeScan,
+  Camera,
+  FileSpreadsheet,
+  FileText,
+  ImageIcon,
+  Loader2,
+  Plus,
+  Search,
+  Upload,
+  X,
+} from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
-// Mock inventory item type
-interface InventoryItem {
-  id: string
-  name: string
-  batchNumber: string
-  expiryDate: string
-  mrp: number
-  purchasePrice: number
-  sellingPrice: number
-  quantity: number
-  gst: number
-  manufacturer: string
-  supplier: string
-  category: string
-}
+// Mock data for suppliers
+const SUPPLIERS = [
+  { id: 1, name: "MedPlus Distributors", gst: "27AABCM1234A1Z5" },
+  { id: 2, name: "Apollo Pharmacy Wholesale", gst: "33ZZXXA9876B1Z8" },
+  { id: 3, name: "Zydus Healthcare", gst: "24AADCZ5432C1Z3" },
+  { id: 4, name: "Sun Pharma Distributors", gst: "06AADCS2345D1Z1" },
+]
 
-// Mock supplier type
-interface Supplier {
-  id: string
-  name: string
-  contactPerson: string
-  phone: string
-  email: string
-  address: string
-}
+// Mock data for products
+const SAMPLE_PRODUCTS = [
+  { id: "P001", name: "Paracetamol 500mg", batch: "BT2023A", expiry: "2025-06", mrp: 25.5, ptr: 20.4, qty: 100 },
+  { id: "P002", name: "Azithromycin 250mg", batch: "AZ1022B", expiry: "2024-12", mrp: 85.75, ptr: 68.6, qty: 50 },
+  { id: "P003", name: "Cetirizine 10mg", batch: "CT2023C", expiry: "2025-03", mrp: 35.25, ptr: 28.2, qty: 75 },
+]
 
-export function EnhancedInward() {
-  const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState('manual')
-  const [isLoading, setIsLoading] = useState(false)
-  const [items, setItems] = useState<InventoryItem[]>([])
-  const [suppliers, setSuppliers] = useState<Supplier[]>([
-    { id: '1', name: 'ABC Pharma', contactPerson: 'John Doe', phone: '9876543210', email: 'john@abcpharma.com', address: 'Mumbai, India' },
-    { id: '2', name: 'XYZ Distributors', contactPerson: 'Jane Smith', phone: '8765432109', email: 'jane@xyzdist.com', address: 'Delhi, India' },
-    { id: '3', name: 'MedSupply Co.', contactPerson: 'Raj Kumar', phone: '7654321098', email: 'raj@medsupply.com', address: 'Bangalore, India' },
-  ])
-  const [selectedSupplier, setSelectedSupplier] = useState<string>('')
-  const [invoiceNumber, setInvoiceNumber] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState('')
-  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
-    name: '',
-    batchNumber: '',
-    expiryDate: '',
-    mrp: 0,
-    purchasePrice: 0,
-    sellingPrice: 0,
-    quantity: 0,
-    gst: 18,
-    manufacturer: '',
-    category: 'Tablet'
-  })
-  const [showScanner, setShowScanner] = useState(false)
+// Template types
+const TEMPLATE_TYPES = [
+  { id: "apollo", name: "Apollo Format" },
+  { id: "medplus", name: "MedPlus Format" },
+  { id: "generic", name: "Generic Format" },
+  { id: "custom", name: "Custom Format" },
+]
+
+export default function EnhancedInward() {
+  const [activeTab, setActiveTab] = useState("manual")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState(0)
+  const [selectedSupplier, setSelectedSupplier] = useState("")
+  const [invoiceNumber, setInvoiceNumber] = useState("")
+  const [invoiceDate, setInvoiceDate] = useState("")
+  const [products, setProducts] = useState<any[]>([])
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState("")
+  const [isCameraActive, setIsCameraActive] = useState(false)
+  const [scanResult, setScanResult] = useState("")
+  const [isScanning, setIsScanning] = useState(false)
+  const [ocrResult, setOcrResult] = useState("")
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
-  const [ocrResult, setOcrResult] = useState<string>('')
-  const [templates, setTemplates] = useState([
-    { id: '1', name: 'Regular Order - ABC Pharma', supplierId: '1', items: [] },
-    { id: '2', name: 'Monthly Stock - XYZ Distributors', supplierId: '2', items: [] },
-  ])
+  const [csvMappings, setCsvMappings] = useState({
+    name: "product_name",
+    batch: "batch_no",
+    expiry: "expiry_date",
+    mrp: "mrp",
+    ptr: "ptr",
+    qty: "quantity",
+  })
 
-  // Handle adding a new item
-  const handleAddItem = () => {
-    if (!newItem.name || !newItem.batchNumber) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive"
-      })
-      return
-    }
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-    const item: InventoryItem = {
-      id: Date.now().toString(),
-      name: newItem.name || '',
-      batchNumber: newItem.batchNumber || '',
-      expiryDate: newItem.expiryDate || '',
-      mrp: newItem.mrp || 0,
-      purchasePrice: newItem.purchasePrice || 0,
-      sellingPrice: newItem.sellingPrice || 0,
-      quantity: newItem.quantity || 0,
-      gst: newItem.gst || 18,
-      manufacturer: newItem.manufacturer || '',
-      supplier: selectedSupplier,
-      category: newItem.category || 'Tablet'
-    }
-
-    setItems([...items, item])
-    setNewItem({
-      name: '',
-      batchNumber: '',
-      expiryDate: '',
-      mrp: 0,
-      purchasePrice: 0,
-      sellingPrice: 0,
-      quantity: 0,
-      gst: 18,
-      manufacturer: '',
-      category: 'Tablet'
-    })
-
-    toast({
-      title: "Item Added",
-      description: `${item.name} has been added to the inward list`
-    })
-  }
-
-  // Handle saving the entire inward entry
-  const handleSaveInward = () => {
-    if (items.length === 0) {
-      toast({
-        title: "No Items",
-        description: "Please add at least one item to save",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (!selectedSupplier || !invoiceNumber) {
-      toast({
-        title: "Missing Information",
-        description: "Please select a supplier and enter an invoice number",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setIsLoading(true)
-    
-    // Simulate API call
+  // Simulate barcode scanning
+  const handleBarcodeScan = () => {
+    setIsScanning(true)
     setTimeout(() => {
-      toast({
-        title: "Inward Saved",
-        description: `Inward entry with ${items.length} items has been saved successfully`
-      })
-      setIsLoading(false)
-      setItems([])
-      setSelectedSupplier('')
-      setInvoiceNumber('')
-      setInvoiceDate('')
-    }, 1500)
-  }
-
-  // Handle barcode scanning
-  const handleBarcodeScan = (barcode: string) => {
-    // In a real app, this would query a database or API
-    const mockProduct = {
-      name: `Product ${barcode.substring(0, 4)}`,
-      batchNumber: `B${barcode.substring(4, 8)}`,
-      expiryDate: '2025-12-31',
-      mrp: parseFloat(barcode.substring(8, 12)) / 100,
-      purchasePrice: parseFloat(barcode.substring(8, 12)) / 120,
-      sellingPrice: parseFloat(barcode.substring(8, 12)) / 110,
-      quantity: 1,
-      gst: 18,
-      manufacturer: 'Generic Manufacturer',
-      category: 'Tablet'
-    }
-
-    setNewItem(mockProduct)
-    setShowScanner(false)
-    
-    toast({
-      title: "Product Scanned",
-      description: `${mockProduct.name} details loaded from barcode`
-    })
-  }
-
-  // Handle OCR processing
-  const handleOcrProcess = (file: File) => {
-    setIsOcrProcessing(true)
-    
-    // Simulate OCR processing
-    setTimeout(() => {
-      const mockOcrText = `INVOICE\nSupplier: ABC Pharma\nInvoice #: INV-2023-456\nDate: 2023-10-15\n\nItems:\n1. Paracetamol 500mg - Batch: B2023 - Qty: 100 - Price: 2.50\n2. Amoxicillin 250mg - Batch: A2023 - Qty: 50 - Price: 5.75\n3. Cetirizine 10mg - Batch: C2023 - Qty: 30 - Price: 3.25`
-      
-      setOcrResult(mockOcrText)
-      setIsOcrProcessing(false)
-      
-      // Auto-extract some information
-      setSelectedSupplier('1') // ABC Pharma
-      setInvoiceNumber('INV-2023-456')
-      setInvoiceDate('2023-10-15')
-      
-      toast({
-        title: "OCR Processing Complete",
-        description: "Invoice data extracted. Please verify and edit as needed."
-      })
+      setIsScanning(false)
+      setScanResult("P001")
+      // Add the scanned product to the list
+      const scannedProduct = SAMPLE_PRODUCTS.find((p) => p.id === "P001")
+      if (scannedProduct) {
+        setProducts((prev) => [...prev, { ...scannedProduct, qty: 1 }])
+      }
     }, 2000)
   }
 
-  // Handle CSV import completion
-  const handleCsvImportComplete = (data: any[]) => {
-    const newItems = data.map((row, index) => ({
-      id: `csv-${Date.now()}-${index}`,
-      name: row.name || row.product_name || row.medicine_name || '',
-      batchNumber: row.batch || row.batch_number || row.batchNumber || '',
-      expiryDate: row.expiry || row.expiry_date || row.expiryDate || '',
-      mrp: parseFloat(row.mrp || row.price || '0'),
-      purchasePrice: parseFloat(row.purchase_price || row.cost || row.purchasePrice || '0'),
-      sellingPrice: parseFloat(row.selling_price || row.sellingPrice || row.mrp || '0'),
-      quantity: parseInt(row.quantity || row.qty || '0', 10),
-      gst: parseFloat(row.gst || row.tax || '18'),
-      manufacturer: row.manufacturer || row.company || '',
-      supplier: selectedSupplier,
-      category: row.category || row.type || 'Tablet'
-    }))
+  // Simulate OCR processing
+  const handleOcrProcess = (file: File) => {
+    setIsOcrProcessing(true)
+    setOcrResult("")
 
-    setItems([...items, ...newItems])
-    
-    toast({
-      title: "CSV Import Complete",
-      description: `${newItems.length} items have been imported`
-    })
+    // Simulate processing delay
+    setTimeout(() => {
+      setIsOcrProcessing(false)
+      setOcrResult(
+        "Invoice detected: INV-2023-456\nSupplier: MedPlus Distributors\nDate: 2023-10-15\n\nItems detected: 3\n1. Paracetamol 500mg x 100\n2. Azithromycin 250mg x 50\n3. Cetirizine 10mg x 75",
+      )
+
+      // Auto-fill form with OCR results
+      setInvoiceNumber("INV-2023-456")
+      setInvoiceDate("2023-10-15")
+      setSelectedSupplier("1") // MedPlus Distributors
+      setProducts(SAMPLE_PRODUCTS)
+    }, 3000)
   }
 
-  // Calculate total value
-  const totalValue = items.reduce((sum, item) => sum + (item.purchasePrice * item.quantity), 0)
+  // Handle CSV import
+  const handleCsvImport = (file: File) => {
+    setIsProcessing(true)
+    setProcessingProgress(0)
+
+    // Simulate processing with progress
+    const interval = setInterval(() => {
+      setProcessingProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval)
+          setIsProcessing(false)
+          // Set products after "processing" the CSV
+          setProducts(SAMPLE_PRODUCTS)
+          return 100
+        }
+        return prev + 10
+      })
+    }, 300)
+  }
+
+  // Handle camera access for barcode scanning
+  useEffect(() => {
+    if (isCameraActive && videoRef.current) {
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream
+          }
+        })
+        .catch((err) => {
+          console.error("Error accessing camera:", err)
+          setIsCameraActive(false)
+        })
+    } else if (!isCameraActive && videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((track) => track.stop())
+    }
+
+    return () => {
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream
+        stream.getTracks().forEach((track) => track.stop())
+      }
+    }
+  }, [isCameraActive])
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (activeTab === "csv") {
+      handleCsvImport(file)
+    } else if (activeTab === "ocr") {
+      handleOcrProcess(file)
+    }
+  }
+
+  // Add a new empty product row
+  const addEmptyProduct = () => {
+    setProducts((prev) => [
+      ...prev,
+      {
+        id: `temp-${Date.now()}`,
+        name: "",
+        batch: "",
+        expiry: "",
+        mrp: 0,
+        ptr: 0,
+        qty: 1,
+      },
+    ])
+  }
+
+  // Remove a product from the list
+  const removeProduct = (index: number) => {
+    setProducts((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Update product field
+  const updateProduct = (index: number, field: string, value: any) => {
+    setProducts((prev) => prev.map((product, i) => (i === index ? { ...product, [field]: value } : product)))
+  }
+
+  // Save the inward entry
+  const saveInward = () => {
+    setIsProcessing(true)
+
+    // Simulate saving process
+    setTimeout(() => {
+      setIsProcessing(false)
+      // Reset form or show success message
+      alert("Inward entry saved successfully!")
+      setProducts([])
+      setInvoiceNumber("")
+      setInvoiceDate("")
+      setSelectedSupplier("")
+    }, 2000)
+  }
 
   return (
-    <div className="w-full space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Enhanced Inward Stock Entry</h2>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-blue-50">
-            Items: {items.length}
-          </Badge>
-          <Badge variant="outline" className="bg-green-50">
-            Total Value: ₹{totalValue.toFixed(2)}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Supplier and Invoice Information */}
+    <div className="space-y-4">
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>Invoice Details</CardTitle>
-          <CardDescription>Enter supplier and invoice information</CardDescription>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Enhanced Inward Entry</span>
+            <Badge variant="outline" className="ml-2">
+              Beta
+            </Badge>
+          </CardTitle>
+          <CardDescription>Multiple ways to add inventory - choose the method that works best for you</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="supplier">Supplier</Label>
-              <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
-                <SelectTrigger id="supplier">
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map(supplier => (
-                    <SelectItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid grid-cols-4 mb-4">
+              <TabsTrigger value="manual" className="flex items-center gap-1">
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">Manual</span>
+              </TabsTrigger>
+              <TabsTrigger value="barcode" className="flex items-center gap-1">
+                <BarcodeScan className="w-4 h-4" />
+                <span className="hidden sm:inline">Barcode</span>
+              </TabsTrigger>
+              <TabsTrigger value="csv" className="flex items-center gap-1">
+                <FileSpreadsheet className="w-4 h-4" />
+                <span className="hidden sm:inline">CSV</span>
+              </TabsTrigger>
+              <TabsTrigger value="ocr" className="flex items-center gap-1">
+                <ImageIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">OCR</span>
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Common invoice details section */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <Label htmlFor="supplier">Supplier</Label>
+                <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
+                  <SelectTrigger id="supplier">
+                    <SelectValue placeholder="Select supplier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPLIERS.map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                        {supplier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="invoice-number">Invoice Number</Label>
+                <Input
+                  id="invoice-number"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="Enter invoice number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="invoice-date">Invoice Date</Label>
+                <Input
+                  id="invoice-date"
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="invoice-number">Invoice Number</Label>
-              <Input 
-                id="invoice-number" 
-                value={invoiceNumber} 
-                onChange={e => setInvoiceNumber(e.target.value)} 
-                placeholder="Enter invoice number" 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="invoice-date">Invoice Date</Label>
-              <Input 
-                id="invoice-date" 
-                type="date" 
-                value={invoiceDate} 
-                onChange={e => setInvoiceDate(e.target.value)} 
-              />
-            </div>
-          </div>
+
+            {/* Tab content */}
+            <TabsContent value="manual" className="mt-0">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">Products</h3>
+                  <div className="flex gap-2">
+                    <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <FileText className="w-4 h-4 mr-2" />
+                          Use Template
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Select Template</DialogTitle>
+                          <DialogDescription>
+                            Choose a template for quick data entry based on supplier format
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select template" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {TEMPLATE_TYPES.map((template) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            onClick={() => {
+                              setIsTemplateDialogOpen(false)
+                              // In a real app, this would load the template structure
+                              if (selectedTemplate) {
+                                setProducts(SAMPLE_PRODUCTS)
+                              }
+                            }}
+                          >
+                            Apply Template
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <Button onClick={addEmptyProduct} size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Product
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead>Expiry</TableHead>
+                        <TableHead>MRP</TableHead>
+                        <TableHead>PTR</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                            No products added. Click "Add Product" to begin.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        products.map((product, index) => (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <Input
+                                value={product.name}
+                                onChange={(e) => updateProduct(index, "name", e.target.value)}
+                                placeholder="Product name"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={product.batch}
+                                onChange={(e) => updateProduct(index, "batch", e.target.value)}
+                                placeholder="Batch"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="month"
+                                value={product.expiry}
+                                onChange={(e) => updateProduct(index, "expiry", e.target.value)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.mrp}
+                                onChange={(e) => updateProduct(index, "mrp", Number.parseFloat(e.target.value))}
+                                placeholder="0.00"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.ptr}
+                                onChange={(e) => updateProduct(index, "ptr", Number.parseFloat(e.target.value))}
+                                placeholder="0.00"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.qty}
+                                onChange={(e) => updateProduct(index, "qty", Number.parseInt(e.target.value))}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => removeProduct(index)}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="barcode" className="mt-0">
+              <div className="space-y-4">
+                <div className="flex flex-col items-center justify-center border rounded-lg p-4">
+                  {isCameraActive ? (
+                    <div className="relative w-full max-w-md">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        className="w-full h-64 object-cover rounded-md"
+                      ></video>
+                      <canvas ref={canvasRef} className="hidden"></canvas>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-3/4 h-1/3 border-2 border-red-500 rounded-md"></div>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        className="absolute bottom-2 right-2"
+                        onClick={() => setIsCameraActive(false)}
+                      >
+                        Close Camera
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <Button onClick={() => setIsCameraActive(true)} className="mb-4">
+                        <Camera className="w-4 h-4 mr-2" />
+                        Open Camera
+                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        Or use a handheld scanner connected to your device
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="w-full max-w-md">
+                    <div className="flex gap-2 mb-4">
+                      <Input
+                        value={scanResult}
+                        onChange={(e) => setScanResult(e.target.value)}
+                        placeholder="Scan or enter barcode"
+                        disabled={isScanning}
+                      />
+                      <Button onClick={handleBarcodeScan} disabled={isScanning}>
+                        {isScanning ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4 mr-2" />
+                        )}
+                        Scan
+                      </Button>
+                    </div>
+
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Quick Tip</AlertTitle>
+                      <AlertDescription>
+                        For bulk scanning, scan each product and adjust quantities afterward.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </div>
+
+                {/* Product table - same as in manual tab */}
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead>Expiry</TableHead>
+                        <TableHead>MRP</TableHead>
+                        <TableHead>PTR</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                            No products scanned yet. Use the scanner above to begin.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        products.map((product, index) => (
+                          <TableRow key={product.id}>
+                            <TableCell>{product.name}</TableCell>
+                            <TableCell>
+                              <Input
+                                value={product.batch}
+                                onChange={(e) => updateProduct(index, "batch", e.target.value)}
+                                placeholder="Batch"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="month"
+                                value={product.expiry}
+                                onChange={(e) => updateProduct(index, "expiry", e.target.value)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.mrp}
+                                onChange={(e) => updateProduct(index, "mrp", Number.parseFloat(e.target.value))}
+                                placeholder="0.00"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.ptr}
+                                onChange={(e) => updateProduct(index, "ptr", Number.parseFloat(e.target.value))}
+                                placeholder="0.00"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.qty}
+                                onChange={(e) => updateProduct(index, "qty", Number.parseInt(e.target.value))}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => removeProduct(index)}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="csv" className="mt-0">
+              <div className="space-y-4">
+                <div className="flex flex-col items-center justify-center border rounded-lg p-4">
+                  <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv" className="hidden" />
+
+                  {isProcessing ? (
+                    <div className="w-full max-w-md space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Processing CSV file...</span>
+                        <span>{processingProgress}%</span>
+                      </div>
+                      <Progress value={processingProgress} />
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <Button onClick={() => fileInputRef.current?.click()} className="mb-4">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload CSV
+                      </Button>
+                      <p className="text-sm text-muted-foreground mb-4">Upload a CSV file with your inventory data</p>
+
+                      <div className="text-left w-full max-w-md">
+                        <h4 className="font-medium mb-2">Column Mappings</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(csvMappings).map(([key, value]) => (
+                            <div key={key} className="flex items-center gap-2">
+                              <span className="text-sm font-medium w-20">{key}:</span>
+                              <Input
+                                value={value}
+                                onChange={(e) => setCsvMappings({ ...csvMappings, [key]: e.target.value })}
+                                className="text-sm h-8"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Product table - same as in other tabs */}
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead>Expiry</TableHead>
+                        <TableHead>MRP</TableHead>
+                        <TableHead>PTR</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                            No products imported yet. Upload a CSV file to begin.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        products.map((product, index) => (
+                          <TableRow key={product.id}>
+                            <TableCell>{product.name}</TableCell>
+                            <TableCell>{product.batch}</TableCell>
+                            <TableCell>{product.expiry}</TableCell>
+                            <TableCell>{product.mrp}</TableCell>
+                            <TableCell>{product.ptr}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.qty}
+                                onChange={(e) => updateProduct(index, "qty", Number.parseInt(e.target.value))}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => removeProduct(index)}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="ocr" className="mt-0">
+              <div className="space-y-4">
+                <div className="flex flex-col items-center justify-center border rounded-lg p-4">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  {isOcrProcessing ? (
+                    <div className="w-full max-w-md space-y-2 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto" />
+                      <p>Processing image... This may take a moment.</p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <Button onClick={() => fileInputRef.current?.click()} className="mb-4">
+                        <ImageIcon className="w-4 h-4 mr-2" />
+                        Upload Invoice Image
+                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        Upload a clear image of your invoice for automatic data extraction
+                      </p>
+                    </div>
+                  )}
+
+                  {ocrResult && (
+                    <div className="w-full max-w-md mt-4">
+                      <h4 className="font-medium mb-2">OCR Results</h4>
+                      <div className="bg-muted p-3 rounded-md">
+                        <pre className="text-xs whitespace-pre-wrap">{ocrResult}</pre>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        The form has been auto-filled based on the OCR results. Please verify the data.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Product table - same as in other tabs */}
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead>Expiry</TableHead>
+                        <TableHead>MRP</TableHead>
+                        <TableHead>PTR</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                            No products extracted yet. Upload an invoice image to begin.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        products.map((product, index) => (
+                          <TableRow key={product.id}>
+                            <TableCell>{product.name}</TableCell>
+                            <TableCell>
+                              <Input
+                                value={product.batch}
+                                onChange={(e) => updateProduct(index, "batch", e.target.value)}
+                                placeholder="Batch"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="month"
+                                value={product.expiry}
+                                onChange={(e) => updateProduct(index, "expiry", e.target.value)}
+                              />
+                            </TableCell>
+                            <TableCell>{product.mrp}</TableCell>
+                            <TableCell>{product.ptr}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                value={product.qty}
+                                onChange={(e) => updateProduct(index, "qty", Number.parseInt(e.target.value))}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => removeProduct(index)}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
-      {/* Entry Methods Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-4">
-          <TabsTrigger value="manual" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Manual Entry</span>
-          </TabsTrigger>
-          <TabsTrigger value="barcode" className="flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            <span className="hidden sm:inline">Barcode Scan</span>
-          </TabsTrigger>
-          <TabsTrigger value="csv" className="flex items-center gap-2">
-            <FileSpreadsheet className="h-4 w-4" />
-            <span className="hidden sm:inline">CSV Import</span>
-          </TabsTrigger>
-          <TabsTrigger value="ocr" className="flex items-center gap-2">
-            <Camera className="h-4 w-4" />
-            <span className="hidden sm:inline">Invoice Scan</span>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Manual Entry Tab */}
-        <TabsContent value="manual" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Add New Item</CardTitle>
-              <CardDescription>Enter product details manually</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Product Name*</Label>
-                  <Input 
-                    id="name" 
-                    value={newItem.name} 
-                    onChange={e => setNewItem({...newItem, name: e.target.value})} 
-                    placeholder="Enter product name" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="batch">Batch Number*</Label>
-                  <Input 
-                    id="batch" 
-                    value={newItem.batchNumber} 
-                    onChange={e => setNewItem({...newItem, batchNumber: e.target.value})} 
-                    placeholder="Enter batch number" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="expiry">Expiry Date</Label>
-                  <Input 
-                    id="expiry" 
-                    type="date" 
-                    value={newItem.expiryDate} 
-                    onChange={e => setNewItem({...newItem, expiryDate: e.target.value})} 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="mrp">MRP (₹)</Label>
-                  <Input 
-                    id="mrp" 
-                    type="number" 
-                    value={newItem.mrp || ''} 
-                    onChange={e => {
-                      const mrp = parseFloat(e.target.value);
-                      setNewItem({
-                        ...newItem, 
-                        mrp,
-                        // Auto-calculate selling price as 90% of MRP
-                        sellingPrice: mrp * 0.9,
-                        // Auto-calculate purchase price as 70% of MRP
-                        purchasePrice: mrp * 0.7
-                      })
-                    }} 
-                    placeholder="0.00" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="purchase-price">Purchase Price (₹)</Label>
-                  <Input 
-                    id="purchase-price" 
-                    type="number" 
-                    value={newItem.purchasePrice || ''} 
-                    onChange={e => setNewItem({...newItem, purchasePrice: parseFloat(e.target.value)})} 
-                    placeholder="0.00" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="selling-price">Selling Price (₹)</Label>
-                  <Input 
-                    id="selling-price" 
-                    type="number" 
-                    value={newItem.sellingPrice || ''} 
-                    onChange={e => setNewItem({...newItem, sellingPrice: parseFloat(e.target.value)})} 
-                    placeholder="0.00" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
-                  <Input 
-                    id="quantity" 
-                    type="number" 
-                    value={newItem.quantity || ''} 
-                    onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value, 10)})} 
-                    placeholder="0" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="gst">GST %</Label>
-                  <Select 
-                    value={newItem.gst?.toString()} 
-                    onValueChange={value => setNewItem({...newItem, gst: parseFloat(value)})}
-                  >
-                    <SelectTrigger id="gst">
-                      <SelectValue placeholder="Select GST rate" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">0%</SelectItem>
-                      <SelectItem value="5">5%</SelectItem>
-                      <SelectItem value="12">12%</SelectItem>
-                      <SelectItem value="18">18%</SelectItem>
-                      <SelectItem value="28">28%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="manufacturer">Manufacturer</Label>
-                  <Input 
-                    id="manufacturer" 
-                    value={newItem.manufacturer} 
-                    onChange={e => setNewItem({...newItem, manufacturer: e.target.value})} 
-                    placeholder="Enter manufacturer name" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Select 
-                    value={newItem.category} 
-                    onValueChange={value => setNewItem({...newItem, category: value})}
-                  >
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Tablet">Tablet</SelectItem>
-                      <SelectItem value="Capsule">Capsule</SelectItem>
-                      <SelectItem value="Syrup">Syrup</SelectItem>
-                      <SelectItem value="Injection">Injection</SelectItem>
-                      <SelectItem value="Cream">Cream</SelectItem>
-                      <SelectItem value="Drops">Drops</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleAddItem} className="flex items-center gap-2">
-                <PackagePlus className="h-4 w-4" />
-                Add Item
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        {/* Barcode Scan Tab */}
-        <TabsContent value="barcode" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Barcode Scanning</CardTitle>
-              <CardDescription>Scan product barcodes to quickly add items</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center space-y-4">
-              {showScanner ? (
-                <div className="w-full max-w-md aspect-video bg-gray-100 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
-                  <p className="text-gray-500 mb-2">Camera feed would appear here</p>
-                  <p className="text-xs text-gray-400">This is a mock interface</p>
-                  
-                  {/* Mock barcode detection */}
-                  <div className="mt-4 space-y-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleBarcodeScan('8901234567890')}
-                    >
-                      Simulate Scan: 8901234567890
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleBarcodeScan('7654321098765')}
-                    >
-                      Simulate Scan: 7654321098765
-                    </Button>
-                  </div>
-                  
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="mt-4" 
-                    onClick={() => setShowScanner(false)}
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Close Scanner
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-center space-y-4">
-                  <Button onClick={() => setShowScanner(true)}>
-                    <Camera className="h-4 w-4 mr-2" />
-                    Open Barcode Scanner
-                  </Button>
-                  <p className="text-sm text-gray-500">
-                    You can also enter a barcode manually:
-                  </p>
-                  <div className="flex gap-2">
-                    <Input placeholder="Enter barcode number" />
-                    <Button variant="outline">
-                      <Search className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Show the manual entry form if a product is loaded via barcode */}
-          {newItem.name && activeTab === 'barcode' && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle>Scanned Product</CardTitle>
-                <CardDescription>Verify and adjust details as needed</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name-scan">Product Name*</Label>
-                    <Input 
-                      id="name-scan" 
-                      value={newItem.name} 
-                      onChange={e => setNewItem({...newItem, name: e.target.value})} 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="batch-scan">Batch Number*</Label>
-                    <Input 
-                      id="batch-scan" 
-                      value={newItem.batchNumber} 
-                      onChange={e => setNewItem({...newItem, batchNumber: e.target.value})} 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity-scan">Quantity</Label>
-                    <Input 
-                      id="quantity-scan" 
-                      type="number" 
-                      value={newItem.quantity || ''} 
-                      onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value, 10)})} 
-                    />
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button onClick={handleAddItem} className="flex items-center gap-2">
-                  <PackagePlus className="h-4 w-4" />
-                  Add Scanned Item
-                </Button>
-              </CardFooter>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* CSV Import Tab */}
-        <TabsContent value="csv" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>CSV Import</CardTitle>
-              <CardDescription>Bulk import items from a CSV file</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg">
-                <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500 mb-4">Upload a CSV file with your inventory data</p>
-                
-                <CSVImportDialog onImportComplete={handleCsvImportComplete} />
-                
-                <div className="mt-4 text-xs text-gray-500">
-                  <p>Supported columns: name, batch_number, expiry_date, mrp, purchase_price, selling_price, quantity, gst, manufacturer, category</p>
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">Templates</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {templates.map(template => (
-                    <Button 
-                      key={template.id} 
-                      variant="outline" 
-                      className="justify-start"
-                      onClick={() => {
-                        setSelectedSupplier(template.supplierId)
-                        toast({
-                          title: "Template Selected",
-                          description: `${template.name} template loaded`
-                        })
-                      }}
-                    >
-                      <FileCheck className="h-4 w-4 mr-2" />
-                      {template.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* OCR Tab */}
-        <TabsContent value="ocr" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Invoice Scan (OCR)</CardTitle>
-              <CardDescription>Extract data from invoice images</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isOcrProcessing ? (
-                <div className="flex flex-col items-center justify-center p-10">
-                  <Loader2 className="h-10 w-10 text-blue-500 animate-spin mb-4" />
-                  <p>Processing invoice image...</p>
-                </div>
-              ) : ocrResult ? (
-                <div className="space-y-4">
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <h3 className="text-sm font-medium mb-2">Extracted Text</h3>
-                    <ScrollArea className="h-40 w-full rounded border p-2">
-                      <pre className="text-xs whitespace-pre-wrap">{ocrResult}</pre>
-                    </ScrollArea>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="text-sm font-medium mb-2">Auto-Detected Fields</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center">
-                          <span className="text-xs font-medium w-24">Supplier:</span>
-                          <Badge variant="outline">ABC Pharma</Badge>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="text-xs font-medium w-24">Invoice #:</span>
-                          <Badge variant="outline">INV-2023-456</Badge>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="text-xs font-medium w-24">Date:</span>
-                          <Badge variant="outline">2023-10-15</Badge>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="text-xs font-medium w-24">Items:</span>
-                          <Badge variant="outline">3 detected</Badge>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <h3 className="text-sm font-medium mb-2">Actions</h3>
-                      <div className="space-y-2">
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start"
-                          onClick={() => {
-                            // Add mock items from OCR
-                            const mockItems = [
-                              {
-                                id: `ocr-${Date.now()}-1`,
-                                name: 'Paracetamol 500mg',
-                                batchNumber: 'B2023',
-                                expiryDate: '2024-12-31',
-                                mrp: 3.00,
-                                purchasePrice: 2.50,
-                                sellingPrice: 2.80,
-                                quantity: 100,
-                                gst: 12,
-                                manufacturer: 'Generic',
-                                supplier: selectedSupplier,
-                                category: 'Tablet'
-                              },
-                              {
-                                id: `ocr-${Date.now()}-2`,
-                                name: 'Amoxicillin 250mg',
-                                batchNumber: 'A2023',
-                                expiryDate: '2024-10-31',
-                                mrp: 6.50,
-                                purchasePrice: 5.75,
-                                sellingPrice: 6.20,
-                                quantity: 50,
-                                gst: 12,
-                                manufacturer: 'Generic',
-                                supplier: selectedSupplier,
-                                category: 'Capsule'
-                              },
-                              {
-                                id: `ocr-${Date.now()}-3`,
-                                name: 'Cetirizine 10mg',
-                                batchNumber: 'C2023',
-                                expiryDate: '2024-11-30',
-                                mrp: 3.75,
-                                purchasePrice: 3.25,
-                                sellingPrice: 3.50,
-                                quantity: 30,
-                                gst: 12,
-                                manufacturer: 'Generic',
-                                supplier: selectedSupplier,
-                                category: 'Tablet'
-                              }
-                            ];
-                            
-                            setItems([...items, ...mockItems]);
-                            
-                            toast({
-                              title: "Items Extracted",
-                              description: `${mockItems.length} items have been added from the invoice`
-                            });
-                          }}
-                        >
-                          <ListChecks className="h-4 w-4 mr-2" />
-                          Add All Detected Items
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start"
-                          onClick={() => {
-                            setOcrResult('');
-                            toast({
-                              title: "OCR Result Cleared",
-                              description: "You can scan another invoice"
-                            });
-                          }}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Clear OCR Result
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg">
-                  <Camera className="h-10 w-10 text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-500 mb-4">Take a photo or upload an invoice image</p>
-                  
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        toast({
-                          title: "Camera Access",
-                          description: "This would open your camera in a real app"
-                        });
-                      }}
-                    >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Take Photo
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        // Simulate file upload and OCR processing
-                        handleOcrProcess(new File([], "invoice.jpg"));
-                      }}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Invoice
-                    </Button>
-                  </div>
-                  
-                  <p className="mt-4 text-xs text-gray-500">
-                    Supported formats: JPG, PNG, PDF
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Items Table */}
-      {items.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Inward Items ({items.length})</CardTitle>
-            <CardDescription>Review items before saving</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[300px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product Name</TableHead>
-                    <TableHead>Batch</TableHead>
-                    <TableHead>Expiry</TableHead>
-                    <TableHead className="text-right">MRP</TableHead>
-                    <TableHead className="text-right">Purchase Price</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map(item => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell>{item.batchNumber}</TableCell>
-                      <TableCell>{item.expiryDate}</TableCell>
-                      <TableCell className="text-right">₹{item.mrp.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">₹{item.purchasePrice.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">₹{(item.purchasePrice * item.quantity).toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => {
-                            setItems(items.filter(i => i.id !== item.id));
-                            toast({
-                              title: "Item Removed",
-                              description: `${item.name} has been removed from the list`
-                            });
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </CardContent>
-          <CardFooter className="flex justify-between">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline">Clear All</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will remove all items from the current inward entry. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => {
-                      setItems([]);
-                      toast({
-                        title: "Items Cleared",
-                        description: "All items have been removed from the inward entry"
-                      });
-                    }}
-                  >
-                    Clear All
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            
-            <Button 
-              onClick={handleSaveInward} 
-              disabled={items.length === 0 || isLoading}
-              className="flex items-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  Save Inward Entry
-                </>
-              )}
-            </Button>
-          </CardFooter>
-        </Card>
+      {isProcessing && (
+        <div className="fixed inset-0 bg-gray-200 bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-md shadow-lg">
+            <Loader2 className="w-10 h-10 animate-spin mx-auto mb-4" />
+            <p className="text-lg font-medium text-center">Saving Inward Entry...</p>
+          </div>
+        </div>
       )}
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-blue-100 p-2 rounded-full">
-              <PackagePlus className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">Today's Inward</p>
-              <p className="text-2xl font-bold">₹24,500</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-green-100 p-2 rounded-full">
-              <Truck className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">Pending Deliveries</p>
-              <p className="text-2xl font-bold">3</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-amber-100 p-2 rounded-full">
-              <Calendar className="h-5 w-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">This Month</p>
-              <p className="text-2xl font-bold">₹1.2L</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-purple-100 p-2 rounded-full">
-              <BarChart4 className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">Avg. Daily</p>
-              <p className="text-2xl font-bold">₹8,200</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }

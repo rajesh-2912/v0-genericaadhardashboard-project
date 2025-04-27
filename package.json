@@ -59,11 +59,11 @@
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
     "jspdf": "latest",
+    "firebase": "latest",
     "peerjs": "latest",
     "nanoid": "latest",
     "papaparse": "latest",
     "jspdf-autotable": "latest",
-    "firebase": "latest",
     "tesseract.js": "latest"
   },
   "devDependencies": {
