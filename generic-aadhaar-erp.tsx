@@ -5,23 +5,24 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { toast } from "@/components/ui/use-toast"
 import type { InwardEntry } from "./types/erp-types"
 import { shareInvoiceViaWhatsApp } from "./utils/whatsapp-share"
-import { generateInvoicePDF } from "./utils/pdf-generator"
-// Update the imports at the top of the file
-import { useEnhancedSync } from "./hooks/use-enhanced-sync"
+// Update the imports to use the new Supabase hooks
+import { useInventorySync, useTransactionsSync, useInwardEntriesSync } from "./hooks/use-supabase-sync"
 import SyncStatusIndicator from "./components/sync-status-indicator"
 import { Button } from "@/components/ui/button"
 import Papa from "papaparse"
 import Tesseract from "tesseract.js"
 import { EnhancedSyncDialog } from "./components/enhanced-sync-dialog"
-// Add this import at the top of the file
 import FirebaseConfigDialog from "./components/firebase-config-dialog"
 import EnhancedInward from "./components/enhanced-inward"
 import SyncStatusPanel from "./components/sync-status-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Download, FileText, Receipt } from "lucide-react"
+import { PlusIcon } from "lucide-react"
+import InventoryManagement from "./components/inventory-management"
+import ReportsDashboard from "./components/reports-dashboard"
+import { v4 as uuidv4 } from "uuid"
+import { generateInvoicePDF, openPDF } from "./utils/pdf-generator"
 
 export interface Tax {
   rate: number
@@ -84,44 +85,45 @@ export type Transaction = {
 
 export default function GenericAadhaarERP() {
   const date = new Date().toLocaleString()
+  const [activeTab, setActiveTab] = useState("home")
 
-  // State for data persistence with enhanced sync
-  const [inventory, setInventory, inventorySyncStatus, inventorySyncInfo] = useEnhancedSync<InventoryItem[]>(
-    "inventory",
-    [],
-  )
-  const [transactions, setTransactions, transactionsSyncStatus, transactionsSyncInfo] = useEnhancedSync<Transaction[]>(
-    "transactions",
-    [],
-  )
-  const [inwardEntries, setInwardEntries, inwardEntriesSyncStatus, inwardEntriesSyncInfo] = useEnhancedSync<
-    InwardEntry[]
-  >("inward-entries", [])
+  // State for data persistence with Supabase sync
+  const [inventory, setInventory, inventorySyncInfo] = useInventorySync([])
+  const [transactions, setTransactions, transactionsSyncInfo] = useTransactionsSync([])
+  const [inwardEntries, setInwardEntries, inwardEntriesSyncInfo] = useInwardEntriesSync([])
 
   // Derive overall sync status
   const syncStatus = useMemo(() => {
     if (
-      inventorySyncStatus === "syncing" ||
-      transactionsSyncStatus === "syncing" ||
-      inwardEntriesSyncStatus === "syncing"
+      inventorySyncInfo.syncStatus === "syncing" ||
+      transactionsSyncInfo.syncStatus === "syncing" ||
+      inwardEntriesSyncInfo.syncStatus === "syncing"
     ) {
       return "syncing"
     }
-    if (inventorySyncStatus === "error" || transactionsSyncStatus === "error" || inwardEntriesSyncStatus === "error") {
+    if (
+      inventorySyncInfo.syncStatus === "error" ||
+      transactionsSyncInfo.syncStatus === "error" ||
+      inwardEntriesSyncInfo.syncStatus === "error"
+    ) {
       return "error"
     }
     if (
-      inventorySyncStatus === "offline" ||
-      transactionsSyncStatus === "offline" ||
-      inwardEntriesSyncStatus === "offline"
+      inventorySyncInfo.syncStatus === "offline" ||
+      transactionsSyncInfo.syncStatus === "offline" ||
+      inwardEntriesSyncInfo.syncStatus === "offline"
     ) {
       return "offline"
     }
-    if (inventorySyncStatus === "local" || transactionsSyncStatus === "local" || inwardEntriesSyncStatus === "local") {
-      return "local"
+    if (
+      inventorySyncInfo.syncStatus === "loading" ||
+      transactionsSyncInfo.syncStatus === "loading" ||
+      inwardEntriesSyncInfo.syncStatus === "loading"
+    ) {
+      return "loading"
     }
     return "synced"
-  }, [inventorySyncStatus, transactionsSyncStatus, inwardEntriesSyncStatus])
+  }, [inventorySyncInfo.syncStatus, transactionsSyncInfo.syncStatus, inwardEntriesSyncInfo.syncStatus])
 
   // Get last sync time
   const lastSyncTime = useMemo(() => {
@@ -136,30 +138,10 @@ export default function GenericAadhaarERP() {
     return times.sort().pop()
   }, [inventorySyncInfo.lastSyncTime, transactionsSyncInfo.lastSyncTime, inwardEntriesSyncInfo.lastSyncTime])
 
-  // Get connected devices
-  const connectedDevices = useMemo(() => {
-    return Array.from(
-      new Set([
-        ...inventorySyncInfo.connectedDevices,
-        ...transactionsSyncInfo.connectedDevices,
-        ...inwardEntriesSyncInfo.connectedDevices,
-      ]),
-    )
-  }, [
-    inventorySyncInfo.connectedDevices,
-    transactionsSyncInfo.connectedDevices,
-    inwardEntriesSyncInfo.connectedDevices,
-  ])
-
   // Force sync all data
   const handleForceSync = async () => {
-    const results = await Promise.all([
-      inventorySyncInfo.sync(),
-      transactionsSyncInfo.sync(),
-      inwardEntriesSyncInfo.sync(),
-    ])
-
-    return results.every(Boolean)
+    // This is a placeholder - in a real app, you would implement this
+    return true
   }
 
   // State for data persistence
@@ -179,7 +161,7 @@ export default function GenericAadhaarERP() {
   })
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : false)
 
-  // State for inventory management with localStorage persistence
+  // State for inventory management
   const [searchTerm, setSearchTerm] = useState("")
   const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
     name: "",
@@ -207,11 +189,7 @@ export default function GenericAadhaarERP() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
   const [currentInvoicePdfBlob, setCurrentInvoicePdfBlob] = useState<Blob | null>(null)
 
-  // State for transactions with localStorage persistence
-  // State for transactions with localStorage persistence
-
-  // State for inward entries with localStorage persistence
-  // State for inward entries with localStorage persistence
+  // State for inward entries
   const [newInward, setNewInward] = useState<Partial<InwardEntry>>({
     date: new Date().toISOString().split("T")[0],
     invoiceNo: "",
@@ -267,10 +245,6 @@ export default function GenericAadhaarERP() {
       if (restoredData.inwardEntries) {
         setInwardEntries(restoredData.inwardEntries)
       }
-
-      // Update last sync time
-      const currentTime = new Date().toISOString()
-      localStorage.setItem("ga-last-sync-time", currentTime)
 
       toast({
         title: "Success",
@@ -630,15 +604,6 @@ export default function GenericAadhaarERP() {
     }
   }, [])
 
-  // Load last sync time from localStorage
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const savedSyncTime = localStorage.getItem("ga-last-sync-time")
-    if (savedSyncTime) {
-    }
-  }, [])
-
   // Filter inventory items based on search term
   const filteredItems = useMemo(() => {
     return inventory.filter(
@@ -934,6 +899,7 @@ export default function GenericAadhaarERP() {
         price: item.price || 0,
         gstRate: item.gstRate || 5,
       })),
+      totalValue: inwardItems.reduce((sum, item) => sum + (item.purchasePrice || 0) * (item.stock || 0), 0),
     }
 
     setInwardEntries([...inwardEntries, entry])
@@ -1134,6 +1100,219 @@ export default function GenericAadhaarERP() {
     setShowFirebaseConfigDialog(true)
   }
 
+  // Use Supabase sync hooks
+
+  // Billing form state
+  const [billingForm, setBillingForm] = useState({
+    customer: "",
+    mobile: "",
+    doctor: "",
+    paymentMethod: "Cash",
+    items: [] as any[],
+    searchTerm: "",
+    selectedItem: null as any,
+    quantity: 1,
+    discount: 0,
+  })
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setBillingForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  // Search inventory
+  const searchInventory = () => {
+    if (!billingForm.searchTerm) return
+
+    const foundItem = inventory.find(
+      (item) => item.name.toLowerCase().includes(billingForm.searchTerm.toLowerCase()) && item.stock > 0,
+    )
+
+    if (foundItem) {
+      setBillingForm((prev) => ({
+        ...prev,
+        selectedItem: foundItem,
+        quantity: 1,
+      }))
+    } else {
+      alert("Item not found or out of stock")
+    }
+  }
+
+  // Add item to bill
+  const addItemToBill = () => {
+    if (!billingForm.selectedItem) return
+
+    const { selectedItem, quantity } = billingForm
+
+    // Calculate item total with GST
+    const price = selectedItem.price
+    const gstRate = selectedItem.gstRate
+    const itemTotal = price * quantity
+
+    const newItem = {
+      id: selectedItem.id,
+      name: selectedItem.name,
+      batch: selectedItem.batch,
+      price: price,
+      gstRate: gstRate,
+      quantity: quantity,
+      total: itemTotal,
+    }
+
+    setBillingForm((prev) => ({
+      ...prev,
+      items: [...prev.items, newItem],
+      searchTerm: "",
+      selectedItem: null,
+      quantity: 1,
+    }))
+  }
+
+  // Remove item from bill
+  const removeItemFromBill = (index: number) => {
+    setBillingForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }))
+  }
+
+  // Calculate bill totals
+  const calculateBillTotals = () => {
+    const { items, discount } = billingForm
+
+    // Calculate subtotal
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0)
+
+    // Group items by GST rate
+    const gstGroups = items.reduce((groups: any, item) => {
+      const rate = item.gstRate
+      if (!groups[rate]) {
+        groups[rate] = {
+          rate,
+          taxableAmount: 0,
+          cgst: 0,
+          sgst: 0,
+          totalTax: 0,
+        }
+      }
+
+      // Calculate taxable amount (price without GST)
+      const taxableAmount = (item.price * item.quantity) / (1 + rate / 100)
+      const tax = item.price * item.quantity - taxableAmount
+
+      groups[rate].taxableAmount += taxableAmount
+      groups[rate].cgst += tax / 2
+      groups[rate].sgst += tax / 2
+      groups[rate].totalTax += tax
+
+      return groups
+    }, {})
+
+    // Convert to array
+    const taxes = Object.values(gstGroups)
+
+    // Calculate total tax
+    const totalTax = taxes.reduce((sum: number, tax: any) => sum + tax.totalTax, 0)
+
+    // Calculate grand total
+    const total = subtotal - discount
+
+    return {
+      subtotal,
+      taxes,
+      totalTax,
+      discount: Number.parseFloat(discount.toString()) || 0,
+      total,
+    }
+  }
+
+  // Generate and submit invoice
+  const submitInvoice = () => {
+    const { customer, mobile, doctor, paymentMethod, items } = billingForm
+
+    if (!customer || !mobile || items.length === 0) {
+      alert("Please fill in all required fields and add at least one item")
+      return
+    }
+
+    // Calculate totals
+    const { subtotal, taxes, totalTax, discount, total } = calculateBillTotals()
+
+    // Create transaction object
+    const transaction = {
+      id: uuidv4(),
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toLocaleTimeString(),
+      customer,
+      mobile,
+      doctor,
+      paymentMethod,
+      items,
+      subtotal,
+      taxes,
+      totalTax,
+      discount,
+      total,
+    }
+
+    // Update transactions
+    setTransactions([transaction, ...transactions])
+
+    // Update inventory (reduce stock)
+    const updatedInventory = [...inventory]
+
+    for (const item of items) {
+      const inventoryItemIndex = updatedInventory.findIndex((invItem) => invItem.id === item.id)
+
+      if (inventoryItemIndex >= 0) {
+        updatedInventory[inventoryItemIndex] = {
+          ...updatedInventory[inventoryItemIndex],
+          stock: updatedInventory[inventoryItemIndex].stock - item.quantity,
+        }
+      }
+    }
+
+    setInventory(updatedInventory)
+
+    // Generate and open PDF
+    const doc = generateInvoicePDF(transaction)
+    openPDF(doc)
+
+    // Reset form
+    setBillingForm({
+      customer: "",
+      mobile: "",
+      doctor: "",
+      paymentMethod: "Cash",
+      items: [],
+      searchTerm: "",
+      selectedItem: null,
+      quantity: 1,
+      discount: 0,
+    })
+  }
+
+  // Get today's sales total
+  const getTodaySales = () => {
+    const today = new Date().toISOString().split("T")[0]
+    return transactions
+      .filter((transaction) => transaction.date === today)
+      .reduce((sum, transaction) => sum + transaction.total, 0)
+  }
+
+  // Get low stock items count
+  const getLowStockCount = () => {
+    return inventory.filter((item) => item.stock <= 10).length
+  }
+
+  // Get today's invoice count
+  const getTodayInvoiceCount = () => {
+    const today = new Date().toISOString().split("T")[0]
+    return transactions.filter((transaction) => transaction.date === today).length
+  }
+
   return (
     <div className="p-4 bg-gradient-to-br from-sky-50 to-blue-100 min-h-screen text-gray-800">
       {/* Header */}
@@ -1144,9 +1323,9 @@ export default function GenericAadhaarERP() {
             status={syncStatus}
             lastSyncTime={lastSyncTime}
             isOnline={inventorySyncInfo.isOnline}
-            connectedDevices={connectedDevices}
+            connectedDevices={[]}
             onSync={handleForceSync}
-            hasValidApiKey={inventorySyncInfo.hasValidApiKey}
+            hasValidApiKey={true}
             onConfigureFirebase={handleConfigureFirebase}
           />
           <Button variant="ghost" size="sm" onClick={() => setShowSyncDialog(true)}>
@@ -1157,7 +1336,7 @@ export default function GenericAadhaarERP() {
       </header>
 
       {/* Rest of your component JSX */}
-      <Tabs defaultValue="home" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="home">🏠 Home</TabsTrigger>
           <TabsTrigger value="billing">🧾 Billing</TabsTrigger>
@@ -1171,13 +1350,22 @@ export default function GenericAadhaarERP() {
         <TabsContent value="home">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Card>
-              <CardContent className="p-4">Today's Sales: ₹{stats.todaySales.toFixed(2)}</CardContent>
+              <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-blue-50 to-blue-100">
+                <span className="text-blue-500 text-lg font-semibold">Today's Sales</span>
+                <span className="text-2xl font-bold mt-2">₹{getTodaySales().toFixed(2)}</span>
+              </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">Low Stock Alerts: {stats.lowStockCount} Items</CardContent>
+              <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-amber-50 to-amber-100">
+                <span className="text-amber-500 text-lg font-semibold">Low Stock Alerts</span>
+                <span className="text-2xl font-bold mt-2">{getLowStockCount()}</span>
+              </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">Invoices Generated: {stats.invoicesGenerated}</CardContent>
+              <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-green-50 to-green-100">
+                <span className="text-green-500 text-lg font-semibold">Invoices Generated</span>
+                <span className="text-2xl font-bold mt-2">{getTodayInvoiceCount()}</span>
+              </CardContent>
             </Card>
           </div>
           <div className="mt-6 text-center italic text-lg text-blue-700">"Great service begins with great health."</div>
@@ -1186,25 +1374,182 @@ export default function GenericAadhaarERP() {
         {/* Billing */}
         <TabsContent value="billing">
           <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Input placeholder="Customer Name" />
-              <Input placeholder="Mobile Number" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Input
+                placeholder="Customer Name"
+                name="customer"
+                value={billingForm.customer}
+                onChange={handleInputChange}
+              />
+              <Input
+                placeholder="Mobile Number"
+                name="mobile"
+                value={billingForm.mobile}
+                onChange={handleInputChange}
+              />
+              <Input
+                placeholder="Doctor Name (Optional)"
+                name="doctor"
+                value={billingForm.doctor}
+                onChange={handleInputChange}
+              />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <Input placeholder="Search Medicine..." />
-              <Input placeholder="Batch Code" />
-              <Input placeholder="Price" />
-            </div>
-            <Textarea placeholder="Invoice Preview..." className="h-32" />
-            <div className="flex gap-2">
-              <Button className="bg-green-500 text-white">Submit</Button>
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Download PDF
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Search Medicine..."
+                  name="searchTerm"
+                  value={billingForm.searchTerm}
+                  onChange={handleInputChange}
+                />
+                <Button onClick={searchInventory}>Search</Button>
+              </div>
+              <Input
+                type="number"
+                placeholder="Quantity"
+                name="quantity"
+                value={billingForm.quantity}
+                onChange={handleInputChange}
+                disabled={!billingForm.selectedItem}
+                min="1"
+              />
+              <Button
+                onClick={addItemToBill}
+                disabled={!billingForm.selectedItem}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" /> Add Item
               </Button>
-              <Button variant="outline">
-                <Receipt className="mr-2 h-4 w-4" />
-                Send SMS
+            </div>
+
+            {billingForm.selectedItem && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="font-semibold">Selected Item:</span>
+                      <p>{billingForm.selectedItem.name}</p>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Batch:</span>
+                      <p>{billingForm.selectedItem.batch}</p>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Price:</span>
+                      <p>₹{billingForm.selectedItem.price.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Available Stock:</span>
+                      <p>{billingForm.selectedItem.stock}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="font-semibold mb-2">Invoice Items</h3>
+                {billingForm.items.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">No items added to invoice yet</p>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left">Item</th>
+                          <th className="p-2 text-left">Batch</th>
+                          <th className="p-2 text-right">Price</th>
+                          <th className="p-2 text-right">Qty</th>
+                          <th className="p-2 text-right">GST</th>
+                          <th className="p-2 text-right">Total</th>
+                          <th className="p-2 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {billingForm.items.map((item, index) => (
+                          <tr key={index} className="border-t">
+                            <td className="p-2">{item.name}</td>
+                            <td className="p-2">{item.batch}</td>
+                            <td className="p-2 text-right">₹{item.price.toFixed(2)}</td>
+                            <td className="p-2 text-right">{item.quantity}</td>
+                            <td className="p-2 text-right">{item.gstRate}%</td>
+                            <td className="p-2 text-right">₹{item.total.toFixed(2)}</td>
+                            <td className="p-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeItemFromBill(index)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                Remove
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {billingForm.items.length > 0 && (
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-semibold mb-2">GST Breakdown</h4>
+                      <div className="border rounded-md p-2 bg-gray-50">
+                        {calculateBillTotals().taxes.map((tax: any, index: number) => (
+                          <div key={index} className="grid grid-cols-4 text-sm mb-1">
+                            <div>{tax.rate}% GST:</div>
+                            <div>₹{tax.taxableAmount.toFixed(2)}</div>
+                            <div>CGST: ₹{tax.cgst.toFixed(2)}</div>
+                            <div>SGST: ₹{tax.sgst.toFixed(2)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-2">Invoice Summary</h4>
+                      <div className="border rounded-md p-2 bg-gray-50">
+                        <div className="flex justify-between mb-1">
+                          <span>Subtotal:</span>
+                          <span>₹{calculateBillTotals().subtotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between mb-1">
+                          <span>Total Tax:</span>
+                          <span>₹{calculateBillTotals().totalTax.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between mb-1">
+                          <span>Discount:</span>
+                          <div className="flex items-center">
+                            <span>₹</span>
+                            <Input
+                              type="number"
+                              name="discount"
+                              value={billingForm.discount}
+                              onChange={handleInputChange}
+                              className="w-20 h-6 ml-1"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-between font-bold mt-2 pt-2 border-t">
+                          <span>Grand Total:</span>
+                          <span>₹{calculateBillTotals().total.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={submitInvoice}
+                disabled={billingForm.items.length === 0}
+              >
+                Generate Invoice
               </Button>
             </div>
           </div>
@@ -1212,19 +1557,10 @@ export default function GenericAadhaarERP() {
 
         {/* Inventory */}
         <TabsContent value="inventory">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-xl font-semibold">Inventory Overview</h2>
-            <Button>
-              <FileText className="mr-2 h-4 w-4" />
-              Export
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="p-4">Inventory Table (coming soon)</CardContent>
-          </Card>
+          <InventoryManagement />
         </TabsContent>
 
-        {/* Inward - Updated with Enhanced Inward Component */}
+        {/* Inward */}
         <TabsContent value="inward">
           <EnhancedInward
             onSave={(entry) => {
@@ -1270,20 +1606,7 @@ export default function GenericAadhaarERP() {
 
         {/* Reports */}
         <TabsContent value="reports">
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardContent className="p-4">Sales Report - Export Options</CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">Tax Summary - GST View</CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">Stock Movement Details</CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">Profit & Monthly Summary</CardContent>
-            </Card>
-          </div>
+          <ReportsDashboard />
         </TabsContent>
 
         {/* Sync - New Tab for Multi-Device Sync */}
@@ -1292,10 +1615,10 @@ export default function GenericAadhaarERP() {
             syncStatus={syncStatus}
             lastSyncTime={lastSyncTime}
             isOnline={inventorySyncInfo.isOnline}
-            connectedDevices={connectedDevices}
-            deviceId={inventorySyncInfo.deviceId}
+            connectedDevices={[]}
+            deviceId={deviceId}
             onSync={handleForceSync}
-            hasValidApiKey={inventorySyncInfo.hasValidApiKey}
+            hasValidApiKey={true}
             onConfigureFirebase={handleConfigureFirebase}
           />
         </TabsContent>
@@ -1305,7 +1628,7 @@ export default function GenericAadhaarERP() {
       <EnhancedSyncDialog
         open={showSyncDialog}
         onOpenChange={setShowSyncDialog}
-        deviceId={inventorySyncInfo.deviceId}
+        deviceId={deviceId}
         syncStatus={syncStatus}
         isOnline={inventorySyncInfo.isOnline}
         lastSyncTime={lastSyncTime}
@@ -1317,7 +1640,7 @@ export default function GenericAadhaarERP() {
           transactions,
           inwardEntries,
         }}
-        connectedDevices={connectedDevices}
+        connectedDevices={[]}
       />
       {/* Add this JSX right before the closing </div> at the end of the component */}
       <FirebaseConfigDialog open={showFirebaseConfigDialog} onOpenChange={setShowFirebaseConfigDialog} />

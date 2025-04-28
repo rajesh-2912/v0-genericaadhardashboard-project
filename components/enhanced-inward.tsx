@@ -16,6 +16,7 @@ import {
   ImageIcon,
   Loader2,
   Plus,
+  Save,
   Search,
   Upload,
   X,
@@ -34,6 +35,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { parseCSVWithFlexibleMapping } from "../utils/csv-parser"
+import { useInventorySync } from "../hooks/use-supabase-sync"
+import { v4 as uuidv4 } from "uuid"
+import type { InwardEntry } from "../types/erp-types"
+import { useToast } from "@/components/ui/use-toast"
 
 // Mock data for suppliers
 const SUPPLIERS = [
@@ -41,13 +47,6 @@ const SUPPLIERS = [
   { id: 2, name: "Apollo Pharmacy Wholesale", gst: "33ZZXXA9876B1Z8" },
   { id: 3, name: "Zydus Healthcare", gst: "24AADCZ5432C1Z3" },
   { id: 4, name: "Sun Pharma Distributors", gst: "06AADCS2345D1Z1" },
-]
-
-// Mock data for products
-const SAMPLE_PRODUCTS = [
-  { id: "P001", name: "Paracetamol 500mg", batch: "BT2023A", expiry: "2025-06", mrp: 25.5, ptr: 20.4, qty: 100 },
-  { id: "P002", name: "Azithromycin 250mg", batch: "AZ1022B", expiry: "2024-12", mrp: 85.75, ptr: 68.6, qty: 50 },
-  { id: "P003", name: "Cetirizine 10mg", batch: "CT2023C", expiry: "2025-03", mrp: 35.25, ptr: 28.2, qty: 75 },
 ]
 
 // Template types
@@ -59,6 +58,9 @@ const TEMPLATE_TYPES = [
 ]
 
 export default function EnhancedInward() {
+  const { toast } = useToast()
+  const [inventory, setInventory] = useInventorySync([])
+
   const [activeTab, setActiveTab] = useState("manual")
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingProgress, setProcessingProgress] = useState(0)
@@ -81,6 +83,7 @@ export default function EnhancedInward() {
     ptr: "ptr",
     qty: "quantity",
   })
+  const [csvData, setCsvData] = useState<any[]>([])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -93,10 +96,16 @@ export default function EnhancedInward() {
       setIsScanning(false)
       setScanResult("P001")
       // Add the scanned product to the list
-      const scannedProduct = SAMPLE_PRODUCTS.find((p) => p.id === "P001")
-      if (scannedProduct) {
-        setProducts((prev) => [...prev, { ...scannedProduct, qty: 1 }])
+      const scannedProduct = {
+        id: `temp-${Date.now()}`,
+        name: "Paracetamol 500mg",
+        batch: "BT2023A",
+        expiry: "2025-06",
+        mrp: 25.5,
+        ptr: 20.4,
+        qty: 1,
       }
+      setProducts((prev) => [...prev, scannedProduct])
     }, 2000)
   }
 
@@ -116,28 +125,100 @@ export default function EnhancedInward() {
       setInvoiceNumber("INV-2023-456")
       setInvoiceDate("2023-10-15")
       setSelectedSupplier("1") // MedPlus Distributors
-      setProducts(SAMPLE_PRODUCTS)
+
+      // Add detected products
+      setProducts([
+        {
+          id: `temp-${Date.now()}-1`,
+          name: "Paracetamol 500mg",
+          batch: "BT2023A",
+          expiry: "2025-06",
+          mrp: 25.5,
+          ptr: 20.4,
+          qty: 100,
+        },
+        {
+          id: `temp-${Date.now()}-2`,
+          name: "Azithromycin 250mg",
+          batch: "AZ1022B",
+          expiry: "2024-12",
+          mrp: 85.75,
+          ptr: 68.6,
+          qty: 50,
+        },
+        {
+          id: `temp-${Date.now()}-3`,
+          name: "Cetirizine 10mg",
+          batch: "CT2023C",
+          expiry: "2025-03",
+          mrp: 35.25,
+          ptr: 28.2,
+          qty: 75,
+        },
+      ])
     }, 3000)
   }
 
   // Handle CSV import
-  const handleCsvImport = (file: File) => {
+  const handleCsvImport = async (file: File) => {
     setIsProcessing(true)
     setProcessingProgress(0)
 
-    // Simulate processing with progress
-    const interval = setInterval(() => {
-      setProcessingProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setIsProcessing(false)
-          // Set products after "processing" the CSV
-          setProducts(SAMPLE_PRODUCTS)
-          return 100
+    try {
+      // Read the file
+      const reader = new FileReader()
+
+      reader.onload = async (e) => {
+        const csvContent = e.target?.result as string
+
+        if (!csvContent) {
+          throw new Error("Failed to read CSV file")
         }
-        return prev + 10
+
+        // Parse CSV with progress updates
+        const { items, columnMapping, rawData } = await parseCSVWithFlexibleMapping(csvContent, (progress) =>
+          setProcessingProgress(progress),
+        )
+
+        // Store raw data for reference
+        setCsvData(rawData)
+
+        // Convert parsed items to product format
+        const newProducts = items.map((item) => ({
+          id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          name: item.name,
+          batch: item.batch,
+          expiry: item.expiry,
+          mrp: item.price,
+          ptr: item.purchasePrice,
+          qty: item.stock,
+          gstRate: item.gstRate,
+        }))
+
+        setProducts(newProducts)
+        setIsProcessing(false)
+        setProcessingProgress(100)
+
+        toast({
+          title: "CSV Import Successful",
+          description: `Imported ${newProducts.length} products from CSV file.`,
+        })
+      }
+
+      reader.onerror = () => {
+        throw new Error("Error reading CSV file")
+      }
+
+      reader.readAsText(file)
+    } catch (error) {
+      console.error("CSV import error:", error)
+      setIsProcessing(false)
+      toast({
+        title: "CSV Import Failed",
+        description: "There was an error importing the CSV file. Please check the format and try again.",
+        variant: "destructive",
       })
-    }, 300)
+    }
   }
 
   // Handle camera access for barcode scanning
@@ -205,20 +286,96 @@ export default function EnhancedInward() {
     setProducts((prev) => prev.map((product, i) => (i === index ? { ...product, [field]: value } : product)))
   }
 
-  // Save the inward entry
-  const saveInward = () => {
+  // Save the inward entry and update inventory
+  const saveInward = async () => {
+    if (!selectedSupplier || !invoiceNumber || !invoiceDate || products.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields and add at least one product.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsProcessing(true)
 
-    // Simulate saving process
-    setTimeout(() => {
-      setIsProcessing(false)
-      // Reset form or show success message
-      alert("Inward entry saved successfully!")
+    try {
+      // Create inward entry
+      const inwardEntry: InwardEntry = {
+        id: uuidv4(),
+        date: invoiceDate,
+        invoiceNo: invoiceNumber,
+        supplier: SUPPLIERS.find((s) => s.id.toString() === selectedSupplier)?.name || "Unknown Supplier",
+        paymentStatus: "Pending",
+        items: products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          batch: product.batch,
+          expiry: product.expiry,
+          mrp: product.mrp,
+          ptr: product.ptr,
+          qty: product.qty,
+        })),
+        totalValue: products.reduce((total, product) => total + product.ptr * product.qty, 0),
+      }
+
+      // Update inventory
+      const updatedInventory = [...inventory]
+
+      for (const product of products) {
+        // Check if product already exists in inventory (by name and batch)
+        const existingItemIndex = updatedInventory.findIndex(
+          (item) => item.name === product.name && item.batch === product.batch,
+        )
+
+        if (existingItemIndex >= 0) {
+          // Update existing item
+          updatedInventory[existingItemIndex] = {
+            ...updatedInventory[existingItemIndex],
+            stock: updatedInventory[existingItemIndex].stock + product.qty,
+            // Update other fields if needed
+            purchasePrice: product.ptr,
+            price: product.mrp,
+            expiry: product.expiry,
+          }
+        } else {
+          // Add new item to inventory
+          updatedInventory.push({
+            id: uuidv4(),
+            name: product.name,
+            batch: product.batch,
+            expiry: product.expiry,
+            stock: product.qty,
+            purchasePrice: product.ptr,
+            price: product.mrp,
+            gstRate: product.gstRate || 5, // Default GST rate if not specified
+          })
+        }
+      }
+
+      // Update inventory in database
+      setInventory(updatedInventory)
+
+      // Reset form
       setProducts([])
       setInvoiceNumber("")
       setInvoiceDate("")
       setSelectedSupplier("")
-    }, 2000)
+
+      toast({
+        title: "Inward Entry Saved",
+        description: "The inward entry has been saved and inventory has been updated.",
+      })
+    } catch (error) {
+      console.error("Error saving inward entry:", error)
+      toast({
+        title: "Error Saving Inward Entry",
+        description: "There was an error saving the inward entry. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -331,7 +488,35 @@ export default function EnhancedInward() {
                               setIsTemplateDialogOpen(false)
                               // In a real app, this would load the template structure
                               if (selectedTemplate) {
-                                setProducts(SAMPLE_PRODUCTS)
+                                setProducts([
+                                  {
+                                    id: `temp-${Date.now()}-1`,
+                                    name: "Paracetamol 500mg",
+                                    batch: "BT2023A",
+                                    expiry: "2025-06",
+                                    mrp: 25.5,
+                                    ptr: 20.4,
+                                    qty: 100,
+                                  },
+                                  {
+                                    id: `temp-${Date.now()}-2`,
+                                    name: "Azithromycin 250mg",
+                                    batch: "AZ1022B",
+                                    expiry: "2024-12",
+                                    mrp: 85.75,
+                                    ptr: 68.6,
+                                    qty: 50,
+                                  },
+                                  {
+                                    id: `temp-${Date.now()}-3`,
+                                    name: "Cetirizine 10mg",
+                                    batch: "CT2023C",
+                                    expiry: "2025-03",
+                                    mrp: 35.25,
+                                    ptr: 28.2,
+                                    qty: 75,
+                                  },
+                                ])
                               }
                             }}
                           >
@@ -764,6 +949,27 @@ export default function EnhancedInward() {
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* Submit Button */}
+          <div className="mt-6 flex justify-end">
+            <Button
+              onClick={saveInward}
+              disabled={isProcessing || products.length === 0 || !selectedSupplier || !invoiceNumber || !invoiceDate}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Inward & Update Inventory
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

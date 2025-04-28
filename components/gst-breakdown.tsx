@@ -1,11 +1,11 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface GSTBreakdownProps {
-  taxes: { rate: number; amount: number }[]
+  taxes?: { rate: number; amount: number }[]
   className?: string
 }
 
-export default function GSTBreakdown({ taxes, className = "" }: GSTBreakdownProps) {
+export default function GSTBreakdown({ taxes = [], className = "" }: GSTBreakdownProps) {
   // Group taxes by rate
   const groupedTaxes = taxes.reduce(
     (acc, tax) => {
