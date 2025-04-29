@@ -38,8 +38,30 @@ export function useInventorySync(
     let isMounted = true
     const initialize = async () => {
       try {
+        // Check network connectivity first
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          if (isMounted) {
+            setSyncInfo((prev) => ({ ...prev, syncStatus: "offline" }))
+            // Use initial data if available when offline
+            if (initialData.length > 0) {
+              setInventory(initialData)
+            }
+          }
+          return
+        }
+
         // Initialize database
-        await initializeDatabase()
+        const dbInitialized = await initializeDatabase()
+        if (!dbInitialized) {
+          if (isMounted) {
+            setSyncInfo((prev) => ({ ...prev, syncStatus: "error" }))
+            // Use initial data if available when DB init fails
+            if (initialData.length > 0) {
+              setInventory(initialData)
+            }
+          }
+          return
+        }
 
         // Fetch initial data
         const data = await getInventory()
@@ -52,17 +74,29 @@ export function useInventorySync(
           }))
         } else if (isMounted && initialData.length > 0) {
           // If no data in Supabase but we have initial data, sync it
-          await syncInventory(initialData)
-          setSyncInfo((prev) => ({
-            ...prev,
-            syncStatus: "synced",
-            lastSyncTime: new Date().toISOString(),
-          }))
+          try {
+            await syncInventory(initialData)
+            setInventory(initialData)
+            setSyncInfo((prev) => ({
+              ...prev,
+              syncStatus: "synced",
+              lastSyncTime: new Date().toISOString(),
+            }))
+          } catch (syncError) {
+            console.error("Error syncing initial inventory:", syncError)
+            // Still use initial data even if sync fails
+            setInventory(initialData)
+            setSyncInfo((prev) => ({ ...prev, syncStatus: "error" }))
+          }
         }
       } catch (error) {
         console.error("Error initializing inventory sync:", error)
         if (isMounted) {
           setSyncInfo((prev) => ({ ...prev, syncStatus: "error" }))
+          // Use initial data if available when there's an error
+          if (initialData.length > 0) {
+            setInventory(initialData)
+          }
         }
       }
     }

@@ -63,10 +63,10 @@
     "nanoid": "latest",
     "papaparse": "latest",
     "firebase": "latest",
-    "@supabase/supabase-js": "latest",
     "uuid": "latest",
     "jspdf-autotable": "latest",
-    "antd": "latest"
+    "antd": "latest",
+    "@supabase/supabase-js": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

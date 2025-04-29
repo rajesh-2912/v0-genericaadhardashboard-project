@@ -5,8 +5,6 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
 import { useInventorySync, useTransactionsSync, useInwardEntriesSync } from "./hooks/use-supabase-sync"
-import SyncStatusIndicator from "./components/sync-status-indicator"
-import { Button } from "@/components/ui/button"
 import { EnhancedSyncDialog } from "./components/enhanced-sync-dialog"
 import FirebaseConfigDialog from "./components/firebase-config-dialog"
 import SyncStatusPanel from "./components/sync-status-panel"
@@ -14,10 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { v4 as uuidv4 } from "uuid"
 import type { InventoryItem, Transaction, InwardEntry } from "./types/erp-types"
-import SimplifiedBilling from "./components/simplified-billing"
 import SimplifiedInventory from "./components/simplified-inventory"
-import SimplifiedInward from "./components/simplified-inward"
 import SimplifiedReports from "./components/simplified-reports"
+// Update the imports to include our new components
+import BillingWithReferral from "./components/billing-with-referral"
+import EnhancedInwardWithCSV from "./components/enhanced-inward-with-csv"
 
 export default function GenericAadhaarERP() {
   const date = new Date().toLocaleString()
@@ -244,35 +243,31 @@ export default function GenericAadhaarERP() {
   }
 
   return (
-    <div className="p-4 bg-gradient-to-br from-sky-50 to-blue-100 min-h-screen text-gray-800">
+    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen text-gray-800">
       {/* Header */}
       <header className="flex justify-between items-center mb-4">
         <h1 className="text-3xl font-bold">🧬 Generic Aadhaar - Pharmacy ERP</h1>
-        <div className="flex items-center gap-2">
-          <SyncStatusIndicator
-            status={syncStatus}
-            lastSyncTime={lastSyncTime}
-            isOnline={inventorySyncInfo.isOnline}
-            connectedDevices={[]}
-            onSync={handleForceSync}
-            hasValidApiKey={true}
-            onConfigureFirebase={handleConfigureFirebase}
-          />
-          <Button variant="ghost" size="sm" onClick={() => setShowSyncDialog(true)}>
-            Sync
-          </Button>
-          <span className="text-sm text-gray-600">{date}</span>
-        </div>
+        <span className="text-sm text-gray-600">{date}</span>
       </header>
 
       {/* Main content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="home">🏠 Home</TabsTrigger>
-          <TabsTrigger value="billing">🧾 Billing</TabsTrigger>
-          <TabsTrigger value="inventory">📦 Inventory</TabsTrigger>
-          <TabsTrigger value="inward">📤 Inward</TabsTrigger>
-          <TabsTrigger value="reports">📊 Reports</TabsTrigger>
+        <TabsList className="mb-4 bg-gray-200">
+          <TabsTrigger value="home" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+            🏠 Home
+          </TabsTrigger>
+          <TabsTrigger value="billing" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+            🧾 Billing
+          </TabsTrigger>
+          <TabsTrigger value="inventory" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+            📦 Inventory
+          </TabsTrigger>
+          <TabsTrigger value="inward" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+            📤 Inward
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+            📊 Reports
+          </TabsTrigger>
           <TabsTrigger value="sync">🔄 Sync</TabsTrigger>
         </TabsList>
 
@@ -303,11 +298,7 @@ export default function GenericAadhaarERP() {
 
         {/* Billing */}
         <TabsContent value="billing">
-          <SimplifiedBilling
-            inventory={inventory}
-            onCreateInvoice={handleCreateInvoice}
-            onUpdateInventory={handleUpdateInventory}
-          />
+          <BillingWithReferral />
         </TabsContent>
 
         {/* Inventory */}
@@ -317,7 +308,7 @@ export default function GenericAadhaarERP() {
 
         {/* Inward */}
         <TabsContent value="inward">
-          <SimplifiedInward onSave={handleSaveInward} />
+          <EnhancedInwardWithCSV />
         </TabsContent>
 
         {/* Reports */}

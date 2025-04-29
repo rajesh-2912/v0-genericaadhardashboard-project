@@ -47,7 +47,7 @@ function formatInvoiceForWhatsApp(invoice: Transaction, pdfUrl?: string): string
 
   message += `\n*Items:*\n`
   invoice.items.forEach((item, index) => {
-    message += `${index + 1}. ${item.name} (${item.batch}) - ${item.quantity} x ₹${item.price.toFixed(2)} = ₹${item.total.toFixed(2)}\n`
+    message += `${index + 1}. ${item.name} (${item.batch}) - ${item.quantity} x ₹${item.price.toFixed(2)} = ₹${(item.price * item.quantity).toFixed(2)}\n`
   })
 
   message += `\n*Summary:*\n`
@@ -97,7 +97,7 @@ ${invoice.doctor ? `Doctor: ${invoice.doctor}` : ""}
 ${invoice.paymentMethod ? `Payment Method: ${invoice.paymentMethod}` : ""}
 
 *Items*
-${invoice.items.map((item) => `- ${item.name} (${item.batch}) x${item.quantity} = ₹${item.total.toFixed(2)}`).join("\n")}
+${invoice.items.map((item) => `- ${item.name} (${item.batch}) x${item.quantity} = ₹${(item.price * item.quantity).toFixed(2)}`).join("\n")}
 
 *Summary*
 Subtotal: ₹${invoice.subtotal.toFixed(2)}

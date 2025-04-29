@@ -10,10 +10,19 @@ let supabaseClient: ReturnType<typeof createClient> | null = null
 
 // Get the Supabase client
 export const getSupabaseClient = () => {
-  if (!supabaseClient && typeof window !== "undefined") {
-    supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+  try {
+    if (!supabaseClient && typeof window !== "undefined") {
+      if (!supabaseUrl || !supabaseAnonKey) {
+        console.warn("Supabase URL or anon key is missing")
+        return null
+      }
+      supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+    }
+    return supabaseClient
+  } catch (error) {
+    console.error("Error creating Supabase client:", error)
+    return null
   }
-  return supabaseClient
 }
 
 // Initialize database tables if they don't exist
@@ -86,12 +95,29 @@ export const syncInventory = async (inventory: InventoryItem[]) => {
 // Get inventory data
 export const getInventory = async (): Promise<InventoryItem[]> => {
   const client = getSupabaseClient()
-  if (!client) return []
+  if (!client) {
+    console.warn("Supabase client not available, returning empty inventory")
+    return []
+  }
 
   try {
+    // Check network connectivity first
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      console.warn("Network is offline, returning empty inventory")
+      return []
+    }
+
     const { data, error } = await client.from("inventory").select("*").order("name")
 
-    if (error) throw error
+    if (error) {
+      console.error("Supabase error fetching inventory:", error)
+      return []
+    }
+
+    if (!data) {
+      console.warn("No inventory data returned from Supabase")
+      return []
+    }
 
     // Convert from Supabase format to app format
     return data.map((item) => ({
@@ -106,6 +132,7 @@ export const getInventory = async (): Promise<InventoryItem[]> => {
     }))
   } catch (error) {
     console.error("Error getting inventory from Supabase:", error)
+    // Return empty array instead of throwing
     return []
   }
 }
@@ -169,12 +196,29 @@ export const syncTransactions = async (transactions: Transaction[]) => {
 // Get transactions data
 export const getTransactions = async (): Promise<Transaction[]> => {
   const client = getSupabaseClient()
-  if (!client) return []
+  if (!client) {
+    console.warn("Supabase client not available, returning empty transactions")
+    return []
+  }
 
   try {
+    // Check network connectivity first
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      console.warn("Network is offline, returning empty transactions")
+      return []
+    }
+
     const { data, error } = await client.from("transactions").select("*").order("date", { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error("Supabase error fetching transactions:", error)
+      return []
+    }
+
+    if (!data) {
+      console.warn("No transactions data returned from Supabase")
+      return []
+    }
 
     // Convert from Supabase format to app format
     return data.map((transaction) => ({
@@ -194,6 +238,7 @@ export const getTransactions = async (): Promise<Transaction[]> => {
     }))
   } catch (error) {
     console.error("Error getting transactions from Supabase:", error)
+    // Return empty array instead of throwing
     return []
   }
 }
@@ -251,12 +296,29 @@ export const syncInwardEntries = async (inwardEntries: InwardEntry[]) => {
 // Get inward entries data
 export const getInwardEntries = async (): Promise<InwardEntry[]> => {
   const client = getSupabaseClient()
-  if (!client) return []
+  if (!client) {
+    console.warn("Supabase client not available, returning empty inward entries")
+    return []
+  }
 
   try {
+    // Check network connectivity first
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      console.warn("Network is offline, returning empty inward entries")
+      return []
+    }
+
     const { data, error } = await client.from("inward_entries").select("*").order("date", { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error("Supabase error fetching inward entries:", error)
+      return []
+    }
+
+    if (!data) {
+      console.warn("No inward entries data returned from Supabase")
+      return []
+    }
 
     // Convert from Supabase format to app format
     return data.map((entry) => ({
@@ -270,6 +332,7 @@ export const getInwardEntries = async (): Promise<InwardEntry[]> => {
     }))
   } catch (error) {
     console.error("Error getting inward entries from Supabase:", error)
+    // Return empty array instead of throwing
     return []
   }
 }
