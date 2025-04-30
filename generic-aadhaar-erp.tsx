@@ -11,13 +11,19 @@ import SyncStatusPanel from "./components/sync-status-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { v4 as uuidv4 } from "uuid"
+import { AuthProvider, useAuth } from "./contexts/auth-context"
+import LoginForm from "./components/login-form"
+import InventoryManagement from "./components/inventory-management"
 import type { InventoryItem, Transaction, InwardEntry } from "./types/erp-types"
 import SimplifiedBilling from "./components/simplified-billing"
-import SimplifiedInventory from "./components/simplified-inventory"
 import SimplifiedInward from "./components/simplified-inward"
 import SimplifiedReports from "./components/simplified-reports"
+import { LogOut, Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { motion, AnimatePresence } from "framer-motion"
 
-export default function GenericAadhaarERP() {
+function ERPContent() {
+  const { user, logout, isAdmin } = useAuth()
   const date = new Date().toLocaleString()
   const [activeTab, setActiveTab] = useState("home")
 
@@ -55,8 +61,23 @@ export default function GenericAadhaarERP() {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
+    const handleOnline = () => {
+      setIsOnline(true)
+      toast({
+        title: "You're back online",
+        description: "Your data will now sync automatically",
+        className: "bg-green-50 border-green-200",
+      })
+    }
+
+    const handleOffline = () => {
+      setIsOnline(false)
+      toast({
+        title: "You're offline",
+        description: "Changes will be saved locally until you reconnect",
+        variant: "destructive",
+      })
+    }
 
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
@@ -153,6 +174,7 @@ export default function GenericAadhaarERP() {
     toast({
       title: "Success",
       description: "Invoice created successfully",
+      className: "bg-green-50 border-green-200",
     })
   }
 
@@ -206,6 +228,7 @@ export default function GenericAadhaarERP() {
     toast({
       title: "Success",
       description: "Inward entry saved and inventory updated",
+      className: "bg-green-50 border-green-200",
     })
   }
 
@@ -249,6 +272,7 @@ export default function GenericAadhaarERP() {
         toast({
           title: "Success",
           description: "Data imported successfully",
+          className: "bg-green-50 border-green-200",
         })
       } catch (error) {
         console.error("Error importing data:", error)
@@ -267,13 +291,84 @@ export default function GenericAadhaarERP() {
     setShowFirebaseConfigDialog(true)
   }
 
+  // Offline warning banner
+  const OfflineBanner = () => {
+    if (isOnline) return null
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-4 rounded shadow-md"
+      >
+        <div className="flex items-center">
+          <div className="py-1">
+            <svg
+              className="h-6 w-6 text-amber-500 mr-4"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold">You are currently offline</p>
+            <p className="text-sm">Changes will be saved locally and synced when you reconnect to the internet.</p>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
   return (
     <div className="p-4 bg-gradient-to-br from-sky-50 to-blue-100 min-h-screen text-gray-800">
       {/* Header */}
       <header className="flex justify-between items-center mb-4">
-        <h1 className="text-3xl font-bold">🧬 Generic Aadhaar - Pharmacy ERP</h1>
-        <span className="text-sm text-gray-600">{date}</span>
+        <div className="flex items-center">
+          <motion.h1
+            className="text-3xl font-bold"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            🧬 Generic Aadhaar - Pharmacy ERP
+          </motion.h1>
+          {user && (
+            <motion.span
+              className="ml-4 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+            </motion.span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">{date}</span>
+          {user && (
+            <Button variant="ghost" size="sm" onClick={logout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </Button>
+          )}
+          {isAdmin() && (
+            <Button variant="ghost" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              Admin
+            </Button>
+          )}
+        </div>
       </header>
+
+      <OfflineBanner />
 
       {/* Main content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -288,27 +383,50 @@ export default function GenericAadhaarERP() {
 
         {/* Home */}
         <TabsContent value="home">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-blue-50 to-blue-100">
-                <span className="text-blue-500 text-lg font-semibold">Today's Sales</span>
-                <span className="text-2xl font-bold mt-2">₹{todaySales.toFixed(2)}</span>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-amber-50 to-amber-100">
-                <span className="text-amber-500 text-lg font-semibold">Low Stock Alerts</span>
-                <span className="text-2xl font-bold mt-2">{lowStockCount}</span>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-green-50 to-green-100">
-                <span className="text-green-500 text-lg font-semibold">Invoices Generated</span>
-                <span className="text-2xl font-bold mt-2">{todayInvoiceCount}</span>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="mt-6 text-center italic text-lg text-blue-700">"Great service begins with great health."</div>
+          <AnimatePresence>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            >
+              <motion.div whileHover={{ scale: 1.03 }} transition={{ type: "spring", stiffness: 300 }}>
+                <Card>
+                  <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-blue-50 to-blue-100">
+                    <span className="text-blue-500 text-lg font-semibold">Today's Sales</span>
+                    <span className="text-2xl font-bold mt-2">₹{todaySales.toFixed(2)}</span>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div whileHover={{ scale: 1.03 }} transition={{ type: "spring", stiffness: 300 }}>
+                <Card>
+                  <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-amber-50 to-amber-100">
+                    <span className="text-amber-500 text-lg font-semibold">Low Stock Alerts</span>
+                    <span className="text-2xl font-bold mt-2">{lowStockCount}</span>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div whileHover={{ scale: 1.03 }} transition={{ type: "spring", stiffness: 300 }}>
+                <Card>
+                  <CardContent className="p-4 flex flex-col items-center justify-center h-32 bg-gradient-to-r from-green-50 to-green-100">
+                    <span className="text-green-500 text-lg font-semibold">Invoices Generated</span>
+                    <span className="text-2xl font-bold mt-2">{todayInvoiceCount}</span>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          </AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="mt-6 text-center italic text-lg text-blue-700"
+          >
+            "Great service begins with great health."
+          </motion.div>
         </TabsContent>
 
         {/* Billing */}
@@ -322,7 +440,7 @@ export default function GenericAadhaarERP() {
 
         {/* Inventory */}
         <TabsContent value="inventory">
-          <SimplifiedInventory inventory={inventory} />
+          <InventoryManagement />
         </TabsContent>
 
         {/* Inward */}
@@ -371,4 +489,33 @@ export default function GenericAadhaarERP() {
       <FirebaseConfigDialog open={showFirebaseConfigDialog} onOpenChange={setShowFirebaseConfigDialog} />
     </div>
   )
+}
+
+export default function GenericAadhaarERP() {
+  return (
+    <AuthProvider>
+      <AuthContent />
+    </AuthProvider>
+  )
+}
+
+function AuthContent() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-sky-50 to-blue-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LoginForm />
+  }
+
+  return <ERPContent />
 }

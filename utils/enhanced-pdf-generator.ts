@@ -31,10 +31,11 @@ export const generateEnhancedInvoicePDF = (transaction: Transaction, options: En
     doc.setTextColor(39, 174, 96) // Green color for header
     doc.text("Generic Aadhaar Pharmacy", pageWidth / 2, 15, { align: "center" })
 
+    // Pharmacy details
     doc.setFontSize(10)
     doc.setTextColor(100, 100, 100) // Gray color for address
-    doc.text("123 Health Street, Medical District", pageWidth / 2, 22, { align: "center" })
-    doc.text("Phone: +91 9876543210 | Email: care@genericaadhaar.com", pageWidth / 2, 27, { align: "center" })
+    doc.text("1-18 near gandhi chowk, jammikunta 505122", pageWidth / 2, 22, { align: "center" })
+    doc.text("Phone: +91 8688729596 | Email: rajeshchandha4@gmail.com", pageWidth / 2, 27, { align: "center" })
 
     // Add a line separator
     doc.setDrawColor(39, 174, 96) // Green color for line
