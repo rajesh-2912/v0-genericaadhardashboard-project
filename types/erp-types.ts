@@ -1,16 +1,25 @@
-export interface InventoryItem {
+export type InventoryItem = {
   id: string
   name: string
   batch: string
-  expiry: string
   stock: number
+  expiry: string
   purchasePrice: number
   price: number
-  gstRate: number
+  gstRate: number // Added GST rate field
 }
 
-export interface TransactionItem {
+export type BillingItem = {
   id: string
+  name: string
+  batch: string
+  quantity: number
+  price: number
+  total: number
+  gstRate: number // Added GST rate field
+}
+
+export type TransactionItem = {
   name: string
   batch: string
   expiry: string
@@ -20,100 +29,54 @@ export interface TransactionItem {
   gstRate: number
 }
 
-export interface TaxBreakdown {
-  rate: number
-  amount: number
-}
-
-export interface Transaction {
+export type Transaction = {
   id: string
+  date: string
+  time: string
   customer: string
   mobile: string
   doctor?: string
-  date: string
-  time: string
-  items: TransactionItem[]
-  subtotal: number
-  discount: number
-  totalTax: number
-  taxes?: TaxBreakdown[]
-  total: number
   paymentMethod?: string
-  referral?: {
-    name: string
+  items: BillingItem[]
+  subtotal: number
+  taxes: {
+    rate: number
     amount: number
-  }
+    taxableAmount: number
+    cgst: number
+    sgst: number
+    totalTax: number
+  }[] // Changed from single tax to array of tax rates and amounts
+  totalTax: number // Total tax amount
+  discount: number
+  total: number
 }
 
-export interface InwardEntry {
+export type InwardItem = {
+  name: string
+  batch: string
+  expiry: string
+  quantity: number
+  purchasePrice: number
+  price: number
+  gstRate: number
+}
+
+export type InwardEntry = {
   id: string
   date: string
   invoiceNo: string
   supplier: string
-  paymentStatus: string
   items: InwardItem[]
+  paymentStatus: string
   totalValue: number
 }
 
-export interface InwardItem {
-  name: string
-  batch: string
-  expiry: string
-  quantity: number
-  purchasePrice: number
-  price: number
-  gstRate: number
-}
-
-export interface SyncInfo {
-  isOnline: boolean
-  syncStatus: SyncStatus
+export type ERPData = {
+  inventory: InventoryItem[]
+  transactions: Transaction[]
+  inwardEntries: InwardEntry[]
   lastSyncTime?: string
-  error?: string
 }
 
-export type SyncStatus =
-  | "loading"
-  | "synced"
-  | "syncing"
-  | "error"
-  | "offline"
-  | "local"
-  | "no-api-key"
-  | "auth-disabled"
-  | "connected"
-  | "disconnected"
-
-export type UserRole = "admin" | "pharmacist" | "cashier"
-
-export interface User {
-  id: string
-  name: string
-  email: string
-  phone: string
-  role: UserRole
-  otp?: string
-  otpExpiry?: Date
-}
-
-export interface ReferralCode {
-  id: string
-  code: string
-  discount: number
-  usageLimit: number
-  usageCount: number
-  expiryDate: string
-  createdBy: string
-}
-
-export interface BillingItem {
-  id: string
-  name: string
-  batch: string
-  quantity: number
-  price: number
-  gstRate: number
-  total: number
-  expiry: string
-  mrp: number
-}
+export type SyncStatus = "local" | "syncing" | "synced" | "error" | "offline" | "connected" | "disconnected"

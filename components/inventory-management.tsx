@@ -20,31 +20,18 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, Edit, FileDown, Plus, Search, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useInventorySync } from "../hooks/use-supabase-sync"
-import { useAuth } from "../contexts/auth-context"
-import { toast } from "@/components/ui/use-toast"
 import type { InventoryItem } from "../types/erp-types"
 
 export default function InventoryManagement() {
   // Use the Supabase sync hook
   const [inventory, setInventory, syncInfo] = useInventorySync([])
-  const { isAdmin } = useAuth()
 
   const [searchTerm, setSearchTerm] = useState("")
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [isManualInwardOpen, setIsManualInwardOpen] = useState(false)
   const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
-    name: "",
-    batch: "",
-    expiry: "",
-    stock: 0,
-    purchasePrice: 0,
-    price: 0,
-    gstRate: 5,
-  })
-  const [manualInwardItem, setManualInwardItem] = useState<Partial<InventoryItem>>({
     name: "",
     batch: "",
     expiry: "",
@@ -105,67 +92,6 @@ export default function InventoryManagement() {
       price: 0,
       gstRate: 5,
     })
-
-    toast({
-      title: "Success",
-      description: "Item added successfully",
-    })
-  }
-
-  // Handle manual inward
-  const handleManualInward = () => {
-    // Check if item with same name and batch exists
-    const existingItemIndex = inventory.findIndex(
-      (item) =>
-        item.name.toLowerCase() === manualInwardItem.name?.toLowerCase() && item.batch === manualInwardItem.batch,
-    )
-
-    if (existingItemIndex >= 0) {
-      // Update existing item
-      const updatedInventory = [...inventory]
-      updatedInventory[existingItemIndex] = {
-        ...updatedInventory[existingItemIndex],
-        stock: updatedInventory[existingItemIndex].stock + (manualInwardItem.stock || 0),
-        // Update other properties if needed
-        purchasePrice: manualInwardItem.purchasePrice || updatedInventory[existingItemIndex].purchasePrice,
-        price: manualInwardItem.price || updatedInventory[existingItemIndex].price,
-        expiry: manualInwardItem.expiry || updatedInventory[existingItemIndex].expiry,
-      }
-
-      setInventory(updatedInventory)
-    } else {
-      // Add as new item
-      const id = `item_${Date.now()}`
-      const itemToAdd: InventoryItem = {
-        id,
-        name: manualInwardItem.name || "",
-        batch: manualInwardItem.batch || "",
-        expiry: manualInwardItem.expiry || "",
-        stock: manualInwardItem.stock || 0,
-        purchasePrice: manualInwardItem.purchasePrice || 0,
-        price: manualInwardItem.price || 0,
-        gstRate: manualInwardItem.gstRate || 5,
-      }
-
-      setInventory([...inventory, itemToAdd])
-    }
-
-    setIsManualInwardOpen(false)
-    setManualInwardItem({
-      name: "",
-      batch: "",
-      expiry: "",
-      stock: 0,
-      purchasePrice: 0,
-      price: 0,
-      gstRate: 5,
-    })
-
-    toast({
-      title: "Success",
-      description: "Stock updated successfully",
-      className: "bg-green-50 border-green-200",
-    })
   }
 
   // Update existing item
@@ -177,11 +103,6 @@ export default function InventoryManagement() {
     setInventory(updatedInventory)
     setIsEditDialogOpen(false)
     setEditItem(null)
-
-    toast({
-      title: "Success",
-      description: "Item updated successfully",
-    })
   }
 
   // Delete item
@@ -192,12 +113,6 @@ export default function InventoryManagement() {
     setInventory(updatedInventory)
     setIsDeleteDialogOpen(false)
     setEditItem(null)
-
-    toast({
-      title: "Success",
-      description: "Item deleted successfully",
-      variant: "destructive",
-    })
   }
 
   // Export inventory as CSV
@@ -227,11 +142,6 @@ export default function InventoryManagement() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-
-    toast({
-      title: "Export Complete",
-      description: "Inventory data exported to CSV",
-    })
   }
 
   // Get status badge for item
@@ -278,114 +188,6 @@ export default function InventoryManagement() {
               <FileDown className="h-4 w-4 mr-2" />
               Export
             </Button>
-            <Dialog open={isManualInwardOpen} onOpenChange={setIsManualInwardOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="secondary">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Manual Inward
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Manual Stock Inward</DialogTitle>
-                  <DialogDescription>Add stock manually if the inward process fails.</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-name" className="text-right">
-                      Name
-                    </Label>
-                    <Input
-                      id="inward-name"
-                      value={manualInwardItem.name}
-                      onChange={(e) => setManualInwardItem({ ...manualInwardItem, name: e.target.value })}
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-batch" className="text-right">
-                      Batch
-                    </Label>
-                    <Input
-                      id="inward-batch"
-                      value={manualInwardItem.batch}
-                      onChange={(e) => setManualInwardItem({ ...manualInwardItem, batch: e.target.value })}
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-expiry" className="text-right">
-                      Expiry
-                    </Label>
-                    <Input
-                      id="inward-expiry"
-                      type="date"
-                      value={manualInwardItem.expiry}
-                      onChange={(e) => setManualInwardItem({ ...manualInwardItem, expiry: e.target.value })}
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-stock" className="text-right">
-                      Stock to Add
-                    </Label>
-                    <Input
-                      id="inward-stock"
-                      type="number"
-                      value={manualInwardItem.stock}
-                      onChange={(e) => setManualInwardItem({ ...manualInwardItem, stock: Number(e.target.value) })}
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-purchasePrice" className="text-right">
-                      Purchase Price
-                    </Label>
-                    <Input
-                      id="inward-purchasePrice"
-                      type="number"
-                      step="0.01"
-                      value={manualInwardItem.purchasePrice}
-                      onChange={(e) =>
-                        setManualInwardItem({ ...manualInwardItem, purchasePrice: Number(e.target.value) })
-                      }
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-price" className="text-right">
-                      Selling Price
-                    </Label>
-                    <Input
-                      id="inward-price"
-                      type="number"
-                      step="0.01"
-                      value={manualInwardItem.price}
-                      onChange={(e) => setManualInwardItem({ ...manualInwardItem, price: Number(e.target.value) })}
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="inward-gstRate" className="text-right">
-                      GST Rate (%)
-                    </Label>
-                    <Input
-                      id="inward-gstRate"
-                      type="number"
-                      step="0.01"
-                      value={manualInwardItem.gstRate}
-                      onChange={(e) => setManualInwardItem({ ...manualInwardItem, gstRate: Number(e.target.value) })}
-                      className="col-span-3"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="submit" onClick={handleManualInward} className="bg-green-600 hover:bg-green-700">
-                    Add Stock
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">
@@ -544,7 +346,7 @@ export default function InventoryManagement() {
                 </TableHeader>
                 <TableBody>
                   {filteredInventory.map((item) => (
-                    <TableRow key={item.id} className="transition-colors hover:bg-gray-50">
+                    <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell>{item.batch}</TableCell>
                       <TableCell>{item.expiry}</TableCell>
@@ -562,23 +364,19 @@ export default function InventoryManagement() {
                               setEditItem(item)
                               setIsEditDialogOpen(true)
                             }}
-                            className="hover:bg-blue-50"
                           >
-                            <Edit className="h-4 w-4 text-blue-500" />
+                            <Edit className="h-4 w-4" />
                           </Button>
-                          {isAdmin() && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setEditItem(item)
-                                setIsDeleteDialogOpen(true)
-                              }}
-                              className="hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setEditItem(item)
+                              setIsDeleteDialogOpen(true)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
