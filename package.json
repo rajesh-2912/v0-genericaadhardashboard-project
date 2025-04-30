@@ -59,14 +59,15 @@
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
     "jspdf": "latest",
+    "@emotion/is-prop-valid": "latest",
     "peerjs": "latest",
     "nanoid": "latest",
     "papaparse": "latest",
     "firebase": "latest",
     "uuid": "latest",
     "jspdf-autotable": "latest",
-    "antd": "latest",
-    "@supabase/supabase-js": "latest"
+    "@supabase/supabase-js": "latest",
+    "framer-motion": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

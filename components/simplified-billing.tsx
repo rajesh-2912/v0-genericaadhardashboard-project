@@ -43,6 +43,7 @@ export default function SimplifiedBilling({ inventory, onCreateInvoice, onUpdate
 
   // Processing states
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [currentInvoice, setCurrentInvoice] = useState<Transaction | null>(null)
 
@@ -244,10 +245,22 @@ export default function SimplifiedBilling({ inventory, onCreateInvoice, onUpdate
   const handleShareWhatsApp = async () => {
     if (!currentInvoice) return
 
+    setIsSharing(true)
+
     try {
       const pdfDoc = generateInvoicePDF(currentInvoice)
       const pdfBlob = pdfDoc.output("blob")
-      await shareInvoiceViaWhatsApp(currentInvoice, pdfBlob, currentInvoice.mobile)
+
+      // Create a message with invoice details
+      const message =
+        `*Invoice #${currentInvoice.id.substring(0, 8).toUpperCase()}*\n\n` +
+        `Customer: ${currentInvoice.customer}\n` +
+        `Date: ${currentInvoice.date}\n` +
+        `Amount: ₹${currentInvoice.total.toFixed(2)}\n\n` +
+        `Thank you for your purchase!`
+
+      // Share via WhatsApp
+      await shareInvoiceViaWhatsApp(currentInvoice, pdfBlob, currentInvoice.mobile, message)
 
       toast({
         title: "Success",
@@ -260,6 +273,8 @@ export default function SimplifiedBilling({ inventory, onCreateInvoice, onUpdate
         description: "Failed to share invoice via WhatsApp",
         variant: "destructive",
       })
+    } finally {
+      setIsSharing(false)
     }
   }
 
@@ -303,9 +318,18 @@ export default function SimplifiedBilling({ inventory, onCreateInvoice, onUpdate
                   <Download className="mr-2 h-4 w-4" />
                   Download PDF
                 </Button>
-                <Button onClick={handleShareWhatsApp} className="bg-green-600 hover:bg-green-700">
-                  <Send className="mr-2 h-4 w-4" />
-                  Share via WhatsApp
+                <Button onClick={handleShareWhatsApp} className="bg-green-600 hover:bg-green-700" disabled={isSharing}>
+                  {isSharing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sharing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Share via WhatsApp
+                    </>
+                  )}
                 </Button>
                 <Button onClick={startNewBill} variant="outline">
                   <Plus className="mr-2 h-4 w-4" />

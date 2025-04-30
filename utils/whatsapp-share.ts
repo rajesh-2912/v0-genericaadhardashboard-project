@@ -78,72 +78,37 @@ function formatInvoiceForWhatsApp(invoice: Transaction, pdfUrl?: string): string
  * @param pdfBlob Optional PDF blob to share as file
  * @param customerPhone Customer phone number (optional)
  */
-export async function shareInvoiceViaWhatsApp(
+export const shareInvoiceViaWhatsApp = async (
   invoice: Transaction,
-  pdfBlob?: Blob,
-  phoneNumber?: string,
-): Promise<boolean> {
+  pdfBlob: Blob,
+  phoneNumber: string,
+  customMessage?: string,
+): Promise<void> => {
   try {
-    // Format the invoice details for WhatsApp
-    const invoiceDetails = `
-*INVOICE #${invoice.id}*
-Date: ${invoice.date}
-Time: ${invoice.time}
+    // Format phone number (remove any non-digit characters)
+    const formattedPhone = phoneNumber.replace(/\D/g, "")
 
-*Customer Details*
-Name: ${invoice.customer}
-Mobile: ${invoice.mobile}
-${invoice.doctor ? `Doctor: ${invoice.doctor}` : ""}
-${invoice.paymentMethod ? `Payment Method: ${invoice.paymentMethod}` : ""}
+    // Create a default message if none provided
+    const message =
+      customMessage ||
+      `*Invoice #${invoice.id.substring(0, 8).toUpperCase()}*\n\n` +
+        `Customer: ${invoice.customer}\n` +
+        `Date: ${invoice.date}\n` +
+        `Amount: ₹${invoice.total.toFixed(2)}\n\n` +
+        `Thank you for your purchase!`
 
-*Items*
-${invoice.items.map((item) => `- ${item.name} (${item.batch}) x${item.quantity} = ₹${(item.price * item.quantity).toFixed(2)}`).join("\n")}
+    // Encode the message for URL
+    const encodedMessage = encodeURIComponent(message)
 
-*Summary*
-Subtotal: ₹${invoice.subtotal.toFixed(2)}
-${invoice.taxes.map((tax) => `GST (${tax.rate}%): ₹${tax.amount.toFixed(2)}`).join("\n")}
-Discount: ₹${invoice.discount.toFixed(2)}
-*Total: ₹${invoice.total.toFixed(2)}*
+    // Create WhatsApp URL
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`
 
-Thank you for shopping with Generic Aadhaar Pharmacy!
-For any queries, please contact us at 1800-XXX-XXXX
-`.trim()
-
-    // Try to use the Web Share API if available
-    if (navigator.share && pdfBlob) {
-      try {
-        const file = new File([pdfBlob], `Invoice-${invoice.id}.pdf`, { type: "application/pdf" })
-
-        await navigator.share({
-          title: `Invoice #${invoice.id}`,
-          text: invoiceDetails,
-          files: [file],
-        })
-
-        return true
-      } catch (error) {
-        console.log("Web Share API not fully supported or failed:", error)
-        // Fall back to WhatsApp link
-      }
-    }
-
-    // Create WhatsApp link
-    let whatsappUrl = "https://wa.me/"
-
-    // Add phone number if provided
-    if (phoneNumber) {
-      whatsappUrl += phoneNumber
-    }
-
-    // Add message text
-    whatsappUrl += `?text=${encodeURIComponent(invoiceDetails)}`
-
-    // Open WhatsApp in a new window
+    // Open WhatsApp in a new tab
     window.open(whatsappUrl, "_blank")
 
-    return true
+    return Promise.resolve()
   } catch (error) {
     console.error("Error sharing via WhatsApp:", error)
-    return false
+    return Promise.reject(error)
   }
 }
