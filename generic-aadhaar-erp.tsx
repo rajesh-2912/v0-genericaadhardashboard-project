@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { toast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,6 +45,9 @@ function ERPContent() {
   const [auditResults, setAuditResults] = useState<{ id: string; expected: number; actual: number }[]>([])
   const [auditCompleted, setAuditCompleted] = useState(false)
 
+  // Use ref to track if audit check has been performed
+  const auditCheckedRef = useRef(false)
+
   // Sync dialog state
   const [showSyncDialog, setShowSyncDialog] = useState(false)
   const [showFirebaseConfigDialog, setShowFirebaseConfigDialog] = useState(false)
@@ -79,13 +82,14 @@ function ERPContent() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : false)
 
   // Check if cycle audit should be shown (once per day)
+  // Using a ref to prevent infinite loops
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || auditCheckedRef.current || inventory.length === 0) return
 
     const today = new Date().toISOString().split("T")[0]
     const lastAuditDate = localStorage.getItem("ga-last-audit-date")
 
-    if (lastAuditDate !== today && inventory.length > 0) {
+    if (lastAuditDate !== today) {
       // Select 5 random items for audit or fewer if inventory has less items
       const itemCount = Math.min(5, inventory.length)
       const shuffled = [...inventory].sort(() => 0.5 - Math.random())
@@ -94,6 +98,9 @@ function ERPContent() {
       setAuditItems(selected)
       setShowCycleAudit(true)
     }
+
+    // Mark that we've checked for audit
+    auditCheckedRef.current = true
   }, [inventory])
 
   // Update online status
@@ -709,7 +716,15 @@ function ERPContent() {
       <FirebaseConfigDialog open={showFirebaseConfigDialog} onOpenChange={setShowFirebaseConfigDialog} />
 
       {/* Cycle Audit Dialog */}
-      <Dialog open={showCycleAudit} onOpenChange={setShowCycleAudit}>
+      <Dialog
+        open={showCycleAudit}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleSkipAudit()
+          }
+          setShowCycleAudit(open)
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Daily Inventory Cycle Audit</DialogTitle>
