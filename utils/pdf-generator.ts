@@ -1,13 +1,6 @@
-import jsPDF from "jspdf"
-import "jspdf-autotable"
+import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
 import type { Transaction } from "../types/erp-types"
-
-// Extend jsPDF with autotable
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF
-  }
-}
 
 // Function to generate a PDF invoice
 export const generateInvoicePDF = (transaction: Transaction): jsPDF => {
@@ -94,7 +87,7 @@ export const generateInvoicePDF = (transaction: Transaction): jsPDF => {
   })
 
   // Generate the table
-  doc.autoTable({
+  autoTable(doc, {
     head: [tableColumn],
     body: tableRows,
     startY: 75,
@@ -260,7 +253,7 @@ export const generateReportPDF = (title: string, data: any[]): jsPDF => {
     })
 
     // Generate the table
-    doc.autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 50,
