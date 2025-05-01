@@ -1,33 +1,38 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
-import { useInventorySync, useTransactionsSync, useInwardEntriesSync } from "./hooks/use-supabase-sync"
-import { EnhancedSyncDialog } from "./components/enhanced-sync-dialog"
-import FirebaseConfigDialog from "./components/firebase-config-dialog"
-import SyncStatusPanel from "./components/sync-status-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { v4 as uuidv4 } from "uuid"
-import { AuthProvider, useAuth } from "./contexts/auth-context"
-import LoginForm from "./components/login-form"
-import InventoryManagement from "./components/inventory-management"
+import { Button } from "@/components/ui/button"
+import { LogOut, Settings, WifiOff, User } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+
+// Import types
 import type { InventoryItem, Transaction, InwardEntry } from "./types/erp-types"
+
+// Import custom hooks
+import { useInventorySync, useTransactionsSync, useInwardEntriesSync } from "./hooks/use-local-storage-sync"
+
+// Import components
+import { EnhancedSyncDialog } from "./components/enhanced-sync-dialog"
+import FirebaseConfigDialog from "./components/firebase-config-dialog"
+import SyncStatusPanel from "./components/sync-status-panel"
+import { AuthProvider, useAuth } from "./contexts/auth-context"
+import UserSwitcher from "./components/login-form"
+import InventoryManagement from "./components/inventory-management"
 import SimplifiedBilling from "./components/simplified-billing"
 import SimplifiedInward from "./components/simplified-inward"
 import SimplifiedReports from "./components/simplified-reports"
-import { LogOut, Settings } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { motion, AnimatePresence } from "framer-motion"
 
 function ERPContent() {
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, switchUser } = useAuth()
   const date = new Date().toLocaleString()
   const [activeTab, setActiveTab] = useState("home")
 
-  // State for data persistence with Supabase sync
+  // State for data persistence with sync hooks
   const [inventory, setInventory, inventorySyncInfo] = useInventorySync([])
   const [transactions, setTransactions, transactionsSyncInfo] = useTransactionsSync([])
   const [inwardEntries, setInwardEntries, inwardEntriesSyncInfo] = useInwardEntriesSync([])
@@ -303,20 +308,7 @@ function ERPContent() {
       >
         <div className="flex items-center">
           <div className="py-1">
-            <svg
-              className="h-6 w-6 text-amber-500 mr-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
+            <WifiOff className="h-6 w-6 text-amber-500 mr-4" />
           </div>
           <div>
             <p className="font-bold">You are currently offline</p>
@@ -353,11 +345,28 @@ function ERPContent() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">{date}</span>
+          {!isOnline && (
+            <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-full text-xs flex items-center">
+              <WifiOff className="h-3 w-3 mr-1" /> Offline
+            </span>
+          )}
           {user && (
-            <Button variant="ghost" size="sm" onClick={logout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
+            <>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => (user.role !== "admin" ? switchUser("admin") : switchUser("pharmacist"))}
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  Switch to {user.role === "admin" ? "Pharmacist" : "Admin"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={logout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
+            </>
           )}
           {isAdmin() && (
             <Button variant="ghost" size="sm">
@@ -514,7 +523,7 @@ function AuthContent() {
   }
 
   if (!isAuthenticated) {
-    return <LoginForm />
+    return <UserSwitcher />
   }
 
   return <ERPContent />

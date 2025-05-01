@@ -19,13 +19,13 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, Edit, FileDown, Plus, Search, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { useInventorySync } from "../hooks/use-supabase-sync"
+import { useInventorySync } from "../hooks/use-local-storage-sync"
 import { useAuth } from "../contexts/auth-context"
 import { toast } from "@/components/ui/use-toast"
 import type { InventoryItem } from "../types/erp-types"
 
 export default function InventoryManagement() {
-  // Use the Supabase sync hook
+  // Use the local storage sync hook
   const [inventory, setInventory, syncInfo] = useInventorySync([])
   const { isAdmin } = useAuth()
 
