@@ -4,9 +4,6 @@ import { useState, useEffect, useRef } from "react"
 import enhancedSyncService, { type SyncStatus, type SyncInfo } from "../utils/enhanced-sync-service"
 
 export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) => void, SyncStatus, SyncInfo] {
-  // Use refs to track initialization state
-  const initializedRef = useRef(false)
-
   // State for data and sync status
   const [data, setData] = useState<T>(initialData)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("local")
@@ -18,12 +15,14 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
     sync: async () => {
       return await enhancedSyncService.forceSync()
     },
-    hasValidApiKey: enhancedSyncService.isApiKeyValid(),
+    hasValidApiKey: enhancedSyncService.isApiKeyValid(), // Changed from getHasValidApiKey to isApiKeyValid
   })
 
   // Use refs to avoid stale closures and prevent unnecessary re-renders
   const dataRef = useRef(data)
   dataRef.current = data
+
+  const initializedRef = useRef(false)
 
   // Initialize from localStorage only once
   useEffect(() => {
@@ -49,7 +48,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
     let isMounted = true
 
     // Check if we have a valid API key
-    const hasValidApiKey = enhancedSyncService.isApiKeyValid()
+    const hasValidApiKey = enhancedSyncService.isApiKeyValid() // Changed from getHasValidApiKey to isApiKeyValid
 
     // Set initial status based on API key availability
     if (!hasValidApiKey) {
@@ -63,7 +62,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
       setSyncInfo((prev) => ({
         ...prev,
         lastSyncTime: enhancedSyncService.getLastSyncTime() || undefined,
-        hasValidApiKey: enhancedSyncService.isApiKeyValid(),
+        hasValidApiKey: enhancedSyncService.isApiKeyValid(), // Changed from getHasValidApiKey to isApiKeyValid
       }))
     })
 
@@ -74,7 +73,7 @@ export function useEnhancedSync<T>(key: string, initialData: T): [T, (data: T) =
       const newStatus = enhancedSyncService.getSyncStatus()
       const newLastSyncTime = enhancedSyncService.getLastSyncTime() || undefined
       const newConnectedDevices = enhancedSyncService.getConnectedDevices()
-      const newHasValidApiKey = enhancedSyncService.isApiKeyValid()
+      const newHasValidApiKey = enhancedSyncService.isApiKeyValid() // Changed from getHasValidApiKey to isApiKeyValid
 
       // Only update if values have changed to prevent unnecessary re-renders
       setSyncStatus((prevStatus) => (prevStatus !== newStatus ? newStatus : prevStatus))

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 
 // Define types
 export type SyncStatus = "loading" | "synced" | "syncing" | "error" | "offline"
@@ -16,9 +16,6 @@ export function useLocalStorageSync<T>(
   key: string,
   initialData: T[] = [] as T[],
 ): [T[], (data: T[]) => void, SyncInfo] {
-  // Use refs to track initialization state
-  const isInitializedRef = useRef(false)
-
   const [data, setData] = useState<T[]>(initialData)
   const [syncInfo, setSyncInfo] = useState<SyncInfo>({
     isOnline: typeof navigator !== "undefined" ? navigator.onLine : false,
@@ -78,31 +75,29 @@ export function useLocalStorageSync<T>(
     [key],
   )
 
-  // Load from localStorage on initial render only once
+  // Load from localStorage on initial render
   useEffect(() => {
-    if (typeof window === "undefined" || isInitializedRef.current) return
-
-    isInitializedRef.current = true
-
-    try {
-      const storedData = localStorage.getItem(key)
-      if (storedData) {
-        setData(JSON.parse(storedData))
+    if (typeof window !== "undefined") {
+      try {
+        const storedData = localStorage.getItem(key)
+        if (storedData) {
+          setData(JSON.parse(storedData))
+          setSyncInfo((prev) => ({
+            ...prev,
+            syncStatus: "synced",
+            lastSyncTime: new Date().toISOString(),
+          }))
+        } else if (initialData.length > 0) {
+          // If no stored data but we have initial data, save it
+          localStorage.setItem(key, JSON.stringify(initialData))
+        }
+      } catch (error) {
+        console.error(`Error loading ${key} from localStorage:`, error)
         setSyncInfo((prev) => ({
           ...prev,
-          syncStatus: "synced",
-          lastSyncTime: new Date().toISOString(),
+          syncStatus: "error",
         }))
-      } else if (initialData.length > 0) {
-        // If no stored data but we have initial data, save it
-        localStorage.setItem(key, JSON.stringify(initialData))
       }
-    } catch (error) {
-      console.error(`Error loading ${key} from localStorage:`, error)
-      setSyncInfo((prev) => ({
-        ...prev,
-        syncStatus: "error",
-      }))
     }
   }, [key, initialData])
 

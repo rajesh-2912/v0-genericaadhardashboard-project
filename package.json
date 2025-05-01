@@ -58,16 +58,16 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
-    "@emotion/is-prop-valid": "latest",
     "jspdf": "latest",
+    "@emotion/is-prop-valid": "latest",
     "peerjs": "latest",
     "nanoid": "latest",
     "papaparse": "latest",
     "firebase": "latest",
     "uuid": "latest",
+    "jspdf-autotable": "latest",
     "@supabase/supabase-js": "latest",
-    "framer-motion": "latest",
-    "jspdf-autotable": "latest"
+    "framer-motion": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
