@@ -1,6 +1,6 @@
 // Firebase configuration for real-time database
 import { initializeApp, getApp } from "firebase/app"
-import { getDatabase, ref, set, onValue, off, update, get } from "firebase/database"
+import { getDatabase, ref, set, onValue, off, update, get, onDisconnect, serverTimestamp } from "firebase/database"
 import { getAuth, signInAnonymously } from "firebase/auth"
 
 // Check if Firebase is already initialized to prevent duplicate initializations
@@ -44,8 +44,23 @@ const getStoreId = () => {
   return storeId
 }
 
+// Generate a unique device ID or retrieve from localStorage
+const getDeviceId = () => {
+  if (typeof window === "undefined") {
+    return "default_device_id"
+  }
+
+  let deviceId = localStorage.getItem("ga-device-id")
+  if (!deviceId) {
+    deviceId = "device_" + Math.random().toString(36).substring(2, 15)
+    localStorage.setItem("ga-device-id", deviceId)
+  }
+  return deviceId
+}
+
 // Store ID for this installation
 const storeId = getStoreId()
+const deviceId = getDeviceId()
 
 // Sign in anonymously to Firebase
 const signInToFirebase = async () => {
@@ -56,6 +71,10 @@ const signInToFirebase = async () => {
   try {
     await signInAnonymously(auth)
     console.log("Signed in anonymously to Firebase")
+
+    // Set up presence system
+    setupPresence()
+
     return true
   } catch (error: any) {
     console.error("Error signing in anonymously:", error)
@@ -67,6 +86,61 @@ const signInToFirebase = async () => {
     }
 
     return false
+  }
+}
+
+// Set up presence system to track connected devices
+const setupPresence = () => {
+  if (!database) return
+
+  const presenceRef = ref(database, `stores/${storeId}/presence/${deviceId}`)
+  const connectedRef = ref(database, ".info/connected")
+
+  onValue(connectedRef, (snap) => {
+    if (snap.val() === true) {
+      // We're connected
+      const presence = {
+        online: true,
+        lastSeen: serverTimestamp(),
+        deviceId: deviceId,
+        userAgent: navigator.userAgent,
+      }
+
+      // When this device disconnects, update the presence data
+      onDisconnect(presenceRef).update({
+        online: false,
+        lastSeen: serverTimestamp(),
+      })
+
+      // Set the presence data
+      set(presenceRef, presence)
+    }
+  })
+}
+
+// Get connected devices
+export const getConnectedDevices = async () => {
+  if (!isAuthEnabled || !database) {
+    return []
+  }
+
+  try {
+    const presenceRef = ref(database, `stores/${storeId}/presence`)
+    const snapshot = await get(presenceRef)
+
+    if (snapshot.exists()) {
+      const presence = snapshot.val()
+      const devices = Object.keys(presence)
+        .filter((id) => id !== deviceId && presence[id].online)
+        .map((id) => presence[id].deviceId || id)
+
+      return devices
+    }
+
+    return []
+  } catch (error) {
+    console.error("Error getting connected devices:", error)
+    return []
   }
 }
 
@@ -111,6 +185,16 @@ export const updateFirebaseData = async (path: string, data: any) => {
     updates[`stores/${storeId}/${path}`] = data
     updates[`stores/${storeId}/lastUpdated`] = new Date().toISOString()
     await update(ref(database), updates)
+
+    // Broadcast update event to other devices
+    const eventRef = ref(database, `stores/${storeId}/events/${Date.now()}`)
+    await set(eventRef, {
+      type: "update",
+      path,
+      deviceId,
+      timestamp: Date.now(),
+    })
+
     return true
   } catch (error) {
     console.error(`Error updating ${path} in Firebase:`, error)
@@ -167,13 +251,44 @@ export const subscribeToFirebase = (callback: (data: any) => void) => {
         callback(data)
       }
     })
+
+    // Also listen for events from other devices
+    const eventsRef = ref(database, `stores/${storeId}/events`)
+    onValue(eventsRef, (snapshot) => {
+      if (unsubscribed) return
+
+      const events = snapshot.val()
+      if (events) {
+        // Process events from other devices
+        Object.values(events).forEach((event: any) => {
+          if (event.deviceId !== deviceId) {
+            console.log(`Received update event from device ${event.deviceId} for path ${event.path}`)
+            // The main data will be updated through the dataRef listener above
+          }
+        })
+      }
+    })
   })
 
   // Return unsubscribe function
   return () => {
     unsubscribed = true
     off(ref(database, `stores/${storeId}`))
+    off(ref(database, `stores/${storeId}/events`))
   }
+}
+
+// Set up a heartbeat to keep connection alive
+export const setupHeartbeat = () => {
+  if (!isAuthEnabled || !database) return
+
+  // Send heartbeat every 30 seconds
+  const interval = setInterval(() => {
+    const presenceRef = ref(database, `stores/${storeId}/presence/${deviceId}/lastSeen`)
+    set(presenceRef, serverTimestamp()).catch((error) => console.error("Error updating heartbeat:", error))
+  }, 30000)
+
+  return () => clearInterval(interval)
 }
 
 export default database

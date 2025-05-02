@@ -2,106 +2,128 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
-import { toast } from "@/components/ui/use-toast"
-import type { User } from "../types/erp-types"
 
-interface AuthContextType {
+// Define the User type
+type User = {
+  id: string
+  name: string
+  role: string
+  email?: string
+}
+
+// Define the AuthContext type
+type AuthContextType = {
   user: User | null
-  isAuthenticated: boolean
   isLoading: boolean
-  switchUser: (role: "admin" | "pharmacist") => void
+  login: (email: string, password: string) => Promise<boolean>
   logout: () => void
   isAdmin: () => boolean
+  switchUser: (role: string) => void
 }
 
+// Create the AuthContext
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Predefined users
-const USERS: Record<string, User> = {
-  admin: {
-    id: "admin-1",
-    name: "Admin User",
-    email: "admin@genericaadhaar.com",
-    phone: "9999999999",
-    role: "admin",
-  },
-  pharmacist: {
-    id: "pharmacist-1",
-    name: "Pharmacist User",
-    email: "pharmacist@genericaadhaar.com",
-    phone: "8888888888",
-    role: "pharmacist",
-  },
-}
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// Create the AuthProvider component
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Check for existing session on mount
+  // Check if user is already logged in
   useEffect(() => {
-    const storedUser = localStorage.getItem("ga-user")
-    if (storedUser) {
+    const checkAuth = async () => {
       try {
-        setUser(JSON.parse(storedUser))
+        // Check if user data exists in localStorage
+        const userData = localStorage.getItem("ga-user")
+
+        if (userData) {
+          setUser(JSON.parse(userData))
+        } else {
+          // For demo purposes, auto-login with a demo user
+          const demoUser = {
+            id: "demo-user-1",
+            name: "Demo User",
+            role: "admin",
+            email: "demo@example.com",
+          }
+
+          localStorage.setItem("ga-user", JSON.stringify(demoUser))
+          setUser(demoUser)
+        }
       } catch (error) {
-        console.error("Failed to parse stored user:", error)
+        console.error("Auth check failed:", error)
+      } finally {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
+
+    checkAuth()
   }, [])
 
-  // Save user to localStorage when it changes
-  useEffect(() => {
-    if (user) {
+  // Login function
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      setIsLoading(true)
+
+      // In a real app, you would validate credentials with a backend
+      // For demo purposes, we'll accept any credentials
+      const user = {
+        id: `user-${Math.random().toString(36).substring(2, 9)}`,
+        name: email.split("@")[0],
+        role: email.includes("admin") ? "admin" : "pharmacist",
+        email,
+      }
+
       localStorage.setItem("ga-user", JSON.stringify(user))
-    } else {
-      localStorage.removeItem("ga-user")
+      setUser(user)
+
+      return true
+    } catch (error) {
+      console.error("Login failed:", error)
+      return false
+    } finally {
+      setIsLoading(false)
     }
-  }, [user])
-
-  const switchUser = (role: "admin" | "pharmacist") => {
-    const selectedUser = USERS[role]
-    setUser(selectedUser)
-
-    toast({
-      title: "User Switched",
-      description: `Now logged in as ${selectedUser.name}`,
-    })
   }
 
+  // Logout function
   const logout = () => {
+    localStorage.removeItem("ga-user")
     setUser(null)
-    toast({
-      title: "Logged Out",
-      description: "You have been logged out successfully",
-    })
   }
 
+  // Check if user is admin
   const isAdmin = () => {
     return user?.role === "admin"
   }
 
+  // Switch user role (for demo purposes)
+  const switchUser = (role: string) => {
+    if (!user) return
+
+    const updatedUser = {
+      ...user,
+      role,
+    }
+
+    localStorage.setItem("ga-user", JSON.stringify(updatedUser))
+    setUser(updatedUser)
+  }
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isLoading,
-        switchUser,
-        logout,
-        isAdmin,
-      }}
-    >
+    <AuthContext.Provider value={{ user, isLoading, login, logout, isAdmin, switchUser }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
-export const useAuth = (): AuthContextType => {
+// Create a hook to use the AuthContext
+export function useAuth() {
   const context = useContext(AuthContext)
+
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider")
   }
+
   return context
 }
