@@ -7,39 +7,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { v4 as uuidv4 } from "uuid"
 import { Button } from "@/components/ui/button"
-import { LogOut, Settings, WifiOff, User, CreditCard, Banknote, Smartphone, AlertCircle, RefreshCw } from "lucide-react"
+import { LogOut, Settings, WifiOff, User, CreditCard, Banknote, Smartphone, AlertCircle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
 // Import types
 import type { InventoryItem, Transaction, InwardEntry } from "./types/erp-types"
 
 // Import custom hooks
-import { useInventorySync, useTransactionsSync, useInwardEntriesSync } from "./hooks/use-reliable-sync"
+import { useInventorySync, useTransactionsSync, useInwardEntriesSync } from "./hooks/use-local-storage-sync"
 
 // Import components
 import { EnhancedSyncDialog } from "./components/enhanced-sync-dialog"
 import FirebaseConfigDialog from "./components/firebase-config-dialog"
+import SyncStatusPanel from "./components/sync-status-panel"
+import { AuthProvider, useAuth } from "./contexts/auth-context"
+import UserSwitcher from "./components/login-form"
+import InventoryManagement from "./components/inventory-management"
 import SimplifiedBilling from "./components/simplified-billing"
-import SimplifiedInventory from "./components/simplified-inventory"
-import EnhancedInwardWithCSV from "./components/enhanced-inward-with-csv"
+import SimplifiedInward from "./components/simplified-inward"
 import SimplifiedReports from "./components/simplified-reports"
-import { AuthProvider } from "./contexts/auth-context"
 
 function ERPContent() {
-  // Mock auth functions since we're not using the actual useAuth hook here
-  const user = { name: "Demo User", role: "admin" }
-  const isLoading = false
-  const logout = () => console.log("Logout clicked")
-  const isAdmin = () => user.role === "admin"
-  const switchUser = (role: string) => console.log(`Switch to ${role} clicked`)
-
+  const { user, logout, isAdmin, switchUser } = useAuth()
   const date = new Date().toLocaleString()
   const [activeTab, setActiveTab] = useState("home")
 
   // State for data persistence with sync hooks
-  const [inventory, setInventory, inventorySyncStatus, inventorySyncInfo] = useInventorySync([])
-  const [transactions, setTransactions, transactionsSyncStatus, transactionsSyncInfo] = useTransactionsSync([])
-  const [inwardEntries, setInwardEntries, inwardEntriesSyncStatus, inwardEntriesSyncInfo] = useInwardEntriesSync([])
+  const [inventory, setInventory, inventorySyncInfo] = useInventorySync([])
+  const [transactions, setTransactions, transactionsSyncInfo] = useTransactionsSync([])
+  const [inwardEntries, setInwardEntries, inwardEntriesSyncInfo] = useInwardEntriesSync([])
 
   // Cycle audit state
   const [showCycleAudit, setShowCycleAudit] = useState(false)
@@ -59,7 +56,6 @@ function ERPContent() {
   const [todaySales, setTodaySales] = useState(0)
   const [lowStockCount, setLowStockCount] = useState(0)
   const [todayInvoiceCount, setTodayInvoiceCount] = useState(0)
-  const [isRefreshingStats, setIsRefreshingStats] = useState(false)
 
   // Payment method stats
   const [paymentStats, setPaymentStats] = useState({
@@ -140,11 +136,6 @@ function ERPContent() {
 
   // Update dashboard stats whenever transactions or inventory changes
   useEffect(() => {
-    updateDashboardStats()
-  }, [transactions, inventory])
-
-  // Function to update dashboard stats
-  const updateDashboardStats = () => {
     // Calculate today's sales
     const today = new Date().toISOString().split("T")[0]
     const todayTransactions = transactions.filter((transaction) => transaction.date === today)
@@ -182,61 +173,35 @@ function ERPContent() {
     })
 
     setPaymentStats(paymentMethodCounts)
-  }
-
-  // Handle manual refresh of dashboard stats
-  const handleRefreshStats = async () => {
-    setIsRefreshingStats(true)
-
-    try {
-      // Force sync all data
-      await inventorySyncInfo.sync()
-      await transactionsSyncInfo.sync()
-      await inwardEntriesSyncInfo.sync()
-
-      // Update stats
-      updateDashboardStats()
-
-      toast({
-        title: "Dashboard Refreshed",
-        description: "Latest data has been loaded from all devices",
-        className: "bg-green-50 border-green-200",
-      })
-    } catch (error) {
-      console.error("Error refreshing dashboard:", error)
-      toast({
-        title: "Refresh Failed",
-        description: "Could not refresh data. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsRefreshingStats(false)
-    }
-  }
+  }, [transactions, inventory])
 
   // Derive overall sync status
   const syncStatus = (() => {
     if (
-      inventorySyncStatus === "syncing" ||
-      transactionsSyncStatus === "syncing" ||
-      inwardEntriesSyncStatus === "syncing"
+      inventorySyncInfo.syncStatus === "syncing" ||
+      transactionsSyncInfo.syncStatus === "syncing" ||
+      inwardEntriesSyncInfo.syncStatus === "syncing"
     ) {
       return "syncing"
     }
-    if (inventorySyncStatus === "error" || transactionsSyncStatus === "error" || inwardEntriesSyncStatus === "error") {
+    if (
+      inventorySyncInfo.syncStatus === "error" ||
+      transactionsSyncInfo.syncStatus === "error" ||
+      inwardEntriesSyncInfo.syncStatus === "error"
+    ) {
       return "error"
     }
     if (
-      inventorySyncStatus === "offline" ||
-      transactionsSyncStatus === "offline" ||
-      inwardEntriesSyncStatus === "offline"
+      inventorySyncInfo.syncStatus === "offline" ||
+      transactionsSyncInfo.syncStatus === "offline" ||
+      inwardEntriesSyncInfo.syncStatus === "offline"
     ) {
       return "offline"
     }
     if (
-      inventorySyncStatus === "loading" ||
-      transactionsSyncStatus === "loading" ||
-      inwardEntriesSyncStatus === "loading"
+      inventorySyncInfo.syncStatus === "loading" ||
+      transactionsSyncInfo.syncStatus === "loading" ||
+      inwardEntriesSyncInfo.syncStatus === "loading"
     ) {
       return "loading"
     }
@@ -258,19 +223,8 @@ function ERPContent() {
 
   // Force sync all data
   const handleForceSync = async () => {
-    try {
-      const results = await Promise.all([
-        inventorySyncInfo.sync(),
-        transactionsSyncInfo.sync(),
-        inwardEntriesSyncInfo.sync(),
-      ])
-
-      // If any sync failed, return false
-      return results.every((result) => result === true)
-    } catch (error) {
-      console.error("Error during force sync:", error)
-      return false
-    }
+    // This is a placeholder - in a real app, you would implement this
+    return true
   }
 
   // Handle creating a new invoice
@@ -554,7 +508,7 @@ function ERPContent() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => switchUser(user.role !== "admin" ? "admin" : "pharmacist")}
+                  onClick={() => (user.role !== "admin" ? switchUser("admin") : switchUser("pharmacist"))}
                 >
                   <User className="h-4 w-4 mr-2" />
                   Switch to {user.role === "admin" ? "Pharmacist" : "Admin"}
@@ -590,19 +544,6 @@ function ERPContent() {
 
         {/* Home */}
         <TabsContent value="home">
-          <div className="flex justify-end mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshStats}
-              disabled={isRefreshingStats || !isOnline}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshingStats ? "animate-spin" : ""}`} />
-              {isRefreshingStats ? "Refreshing..." : "Refresh Dashboard"}
-            </Button>
-          </div>
-
           <AnimatePresence>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -706,8 +647,8 @@ function ERPContent() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
             className="mt-6 text-center italic text-lg text-emerald-700"
           >
@@ -726,178 +667,125 @@ function ERPContent() {
 
         {/* Inventory */}
         <TabsContent value="inventory">
-          <SimplifiedInventory inventory={inventory} onUpdateInventory={handleUpdateInventory} />
+          <InventoryManagement />
         </TabsContent>
 
         {/* Inward */}
         <TabsContent value="inward">
-          <EnhancedInwardWithCSV inventory={inventory} onSaveInward={handleSaveInward} />
+          <SimplifiedInward onSave={handleSaveInward} />
         </TabsContent>
 
         {/* Reports */}
         <TabsContent value="reports">
-          <SimplifiedReports transactions={transactions} inventory={inventory} inwardEntries={inwardEntries} />
+          <SimplifiedReports transactions={transactions} />
         </TabsContent>
 
         {/* Sync */}
         <TabsContent value="sync">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Synchronization Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Status:</span>
-                    <span
-                      className={`font-semibold ${syncStatus === "synced" ? "text-green-600" : syncStatus === "syncing" ? "text-blue-600" : "text-amber-600"}`}
-                    >
-                      {syncStatus.charAt(0).toUpperCase() + syncStatus.slice(1)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Last Synced:</span>
-                    <span>{lastSyncTime ? new Date(lastSyncTime).toLocaleString() : "Never"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Device ID:</span>
-                    <span className="font-mono text-sm">{deviceId}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Connected Devices:</span>
-                    <span>{inventorySyncInfo.connectedDevices.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Network Status:</span>
-                    <span className={isOnline ? "text-green-600" : "text-red-600"}>
-                      {isOnline ? "Online" : "Offline"}
-                    </span>
-                  </div>
-                  <Button onClick={() => setShowSyncDialog(true)} className="w-full mt-2" disabled={!isOnline}>
-                    Manage Synchronization
-                  </Button>
-                  <Button onClick={handleConfigureFirebase} variant="outline" className="w-full mt-2">
-                    Configure Firebase
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Data Management</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Inventory Items:</span>
-                    <span>{inventory.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Transactions:</span>
-                    <span>{transactions.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Inward Entries:</span>
-                    <span>{inwardEntries.length}</span>
-                  </div>
-                  <Button onClick={handleExportData} className="w-full mt-2">
-                    Export Data
-                  </Button>
-                  <div className="mt-2">
-                    <label htmlFor="import-file" className="block mb-2 text-sm font-medium">
-                      Import Data
-                    </label>
-                    <input
-                      type="file"
-                      id="import-file"
-                      accept=".json"
-                      onChange={handleImportFile}
-                      className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <SyncStatusPanel
+            syncStatus={syncStatus}
+            lastSyncTime={lastSyncTime}
+            isOnline={inventorySyncInfo.isOnline}
+            connectedDevices={[]}
+            deviceId={deviceId}
+            onSync={handleForceSync}
+            hasValidApiKey={true}
+            onConfigureFirebase={handleConfigureFirebase}
+          />
         </TabsContent>
       </Tabs>
 
-      {/* Sync Dialog */}
+      {/* Dialogs */}
       <EnhancedSyncDialog
         open={showSyncDialog}
         onOpenChange={setShowSyncDialog}
         deviceId={deviceId}
         syncStatus={syncStatus}
-        isOnline={isOnline}
+        isOnline={inventorySyncInfo.isOnline}
         lastSyncTime={lastSyncTime}
         onSync={handleForceSync}
         onExport={handleExportData}
         onImport={handleImportFile}
-        data={{ inventory, transactions, inwardEntries }}
-        connectedDevices={inventorySyncInfo.connectedDevices}
+        data={{
+          inventory,
+          transactions,
+          inwardEntries,
+        }}
+        connectedDevices={[]}
       />
-
-      {/* Firebase Config Dialog */}
       <FirebaseConfigDialog open={showFirebaseConfigDialog} onOpenChange={setShowFirebaseConfigDialog} />
 
       {/* Cycle Audit Dialog */}
-      {showCycleAudit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Daily Inventory Audit</h2>
-            {!auditCompleted ? (
-              <>
-                <p className="mb-4">
-                  Please verify the current stock count for:
-                  <span className="font-bold block mt-2">{auditItems[currentAuditIndex]?.name}</span>
-                  <span className="text-sm text-gray-500 block">Batch: {auditItems[currentAuditIndex]?.batch}</span>
+      <Dialog
+        open={showCycleAudit}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleSkipAudit()
+          }
+          setShowCycleAudit(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Daily Inventory Cycle Audit</DialogTitle>
+            <DialogDescription>
+              {auditCompleted
+                ? "Audit completed successfully! Inventory has been updated."
+                : "Please verify the actual count of these items to ensure inventory accuracy."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!auditCompleted && auditItems.length > 0 && currentAuditIndex < auditItems.length && (
+            <div className="py-4">
+              <div className="mb-4 p-4 bg-emerald-50 rounded-lg">
+                <h3 className="font-medium text-lg text-emerald-700">{auditItems[currentAuditIndex].name}</h3>
+                <p className="text-sm text-gray-500">Batch: {auditItems[currentAuditIndex].batch}</p>
+                <p className="text-sm text-gray-500">Expiry: {auditItems[currentAuditIndex].expiry}</p>
+                <p className="mt-2">
+                  <span className="font-medium">System Count:</span> {auditItems[currentAuditIndex].stock}
                 </p>
-                <p className="mb-4">
-                  System shows: <span className="font-bold">{auditItems[currentAuditIndex]?.stock} units</span>
-                </p>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-1">Actual Count:</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      className="border rounded p-2 w-full"
-                      defaultValue={auditItems[currentAuditIndex]?.stock}
-                      min={0}
-                      id="audit-count"
-                    />
-                    <Button
-                      onClick={() => {
-                        const input = document.getElementById("audit-count") as HTMLInputElement
-                        const count = Number.parseInt(input.value)
-                        if (!isNaN(count) && count >= 0) {
-                          handleAuditItemCount(count)
-                        }
-                      }}
-                    >
-                      Confirm
-                    </Button>
-                  </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="actual-count" className="text-sm font-medium">
+                    Actual Count:
+                  </label>
+                  <input
+                    type="number"
+                    id="actual-count"
+                    defaultValue={auditItems[currentAuditIndex].stock}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
                 </div>
+
                 <div className="flex justify-between">
                   <Button variant="outline" onClick={handleSkipAudit}>
-                    Skip Audit
+                    Skip Audit Today
                   </Button>
-                  <div className="text-sm text-gray-500">
-                    Item {currentAuditIndex + 1} of {auditItems.length}
-                  </div>
+                  <Button
+                    onClick={() => {
+                      const input = document.getElementById("actual-count") as HTMLInputElement
+                      handleAuditItemCount(Number.parseInt(input.value || "0", 10))
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {currentAuditIndex === auditItems.length - 1 ? "Complete Audit" : "Next Item"}
+                  </Button>
                 </div>
-              </>
-            ) : (
-              <div className="text-center">
-                <p className="text-green-600 font-bold mb-2">Audit Completed!</p>
-                <p>Thank you for verifying your inventory.</p>
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
+
+          {auditCompleted && (
+            <div className="py-4 flex justify-center">
+              <div className="animate-pulse p-3 rounded-full bg-emerald-100">
+                <div className="h-8 w-8 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -905,7 +793,28 @@ function ERPContent() {
 export default function GenericAadhaarERP() {
   return (
     <AuthProvider>
-      <ERPContent />
+      <AuthContent />
     </AuthProvider>
   )
+}
+
+function AuthContent() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-emerald-50 to-teal-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <UserSwitcher />
+  }
+
+  return <ERPContent />
 }
